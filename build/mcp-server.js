@@ -244,23 +244,66 @@ export async function startMcpServer() {
  * Handle the get_last_n_messages tool
  */
 async function handleGetLastNMessages(args, tasksDir) {
-    try {
-        console.error(`Handling get_last_n_messages with args: ${JSON.stringify(args)}`);
-        const { task_id, limit } = GetLastNMessagesSchema.parse(args);
-        const messages = await getConversationHistory(tasksDir, task_id, { limit });
-        console.error(`Retrieved ${messages.length} messages`);
-        return {
-            content: [
-                {
-                    type: 'text',
-                    text: JSON.stringify(messages, null, 2)
-                }
-            ]
-        };
-    } catch (error) {
-        console.error(`Error in get_last_n_messages: ${error.message}`);
-        throw new Error(`Failed to get conversation history: ${error.message}`);
+  try {
+    console.error(`Handling get_last_n_messages with args: ${JSON.stringify(args)}`);
+    const { task_id, limit } = GetLastNMessagesSchema.parse(args);
+    
+    console.error(`Retrieving last ${limit} messages for task ${task_id}`);
+    let messages = await getConversationHistory(tasksDir, task_id, { limit: limit * 2 }); // Get more messages than needed to ensure we have enough after filtering
+    
+    console.error(`Retrieved ${messages.length} messages before processing`);
+    
+    // Check if messages have timestamp property
+    const hasTimestamp = messages.length > 0 && 'timestamp' in messages[0] && messages[0].timestamp;
+    
+    if (!hasTimestamp) {
+      console.error('Messages do not have timestamp property, adding index-based timestamps');
+      
+      // Add index-based timestamps to messages (higher index = newer message)
+      // This assumes that messages are in chronological order (oldest first)
+      messages.forEach((msg, index) => {
+        // Use the index as a pseudo-timestamp (higher index = newer message)
+        msg.timestamp = index;
+      });
+      
+      // Explicitly sort messages in reverse order (newest first)
+      messages.sort((a, b) => b.timestamp - a.timestamp);
+      
+      console.error('Messages sorted in reverse order (newest first)');
+    } else {
+      console.error('Messages have timestamp property, ensuring they are sorted');
+      
+      // Explicitly sort messages by timestamp in descending order (newest first)
+      messages.sort((a, b) => b.timestamp - a.timestamp);
     }
+    
+    // Limit to the requested number of messages
+    messages = messages.slice(0, limit);
+    
+    // Log the timestamps of the first few messages to verify they're in descending order
+    if (messages.length > 0) {
+      console.error(`First message role: ${messages[0].role}, timestamp: ${messages[0].timestamp}`);
+      if (messages.length > 1) {
+        console.error(`Second message role: ${messages[1].role}, timestamp: ${messages[1].timestamp}`);
+      }
+      if (messages.length > 2) {
+        console.error(`Third message role: ${messages[2].role}, timestamp: ${messages[2].timestamp}`);
+      }
+    }
+    
+    console.error(`Returning ${messages.length} messages`);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(messages, null, 2)
+        }
+      ]
+    };
+  } catch (error) {
+    console.error(`Error in get_last_n_messages: ${error.message}`);
+    throw new Error(`Failed to get conversation history: ${error.message}`);
+  }
 }
 
 /**
