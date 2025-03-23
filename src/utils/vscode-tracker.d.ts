@@ -13,7 +13,7 @@ export interface FileInfo {
 }
 
 /**
- * Get list of recently opened VS Code workspaces
+ * Get list of recently opened VS Code workspaces using multiple detection methods
  * @returns List of workspace paths
  */
 export function getVSCodeWorkspaces(): string[];
