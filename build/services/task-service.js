@@ -111,27 +111,32 @@ export async function getTask(tasksDir, taskId) {
         catch (e) {
             // File doesn't exist
         }
-        // Get file sizes if they exist
+        // Get file sizes and modification times if they exist
         let apiFileSize = 0;
         let uiFileSize = 0;
+        let apiMtime = 0;
+        let uiMtime = 0;
+        
         if (apiFileExists) {
             const apiStats = await fs.stat(apiFilePath);
             apiFileSize = apiStats.size;
+            apiMtime = apiStats.mtime.getTime();
         }
+        
         if (uiFileExists) {
             const uiStats = await fs.stat(uiFilePath);
             uiFileSize = uiStats.size;
+            uiMtime = uiStats.mtime.getTime();
         }
+        
         // Calculate the lastActivityTimestamp
         let lastActivityTimestamp = parseInt(taskId, 10) || 0;
         
         if (apiFileExists) {
-            const apiMtime = apiStats.mtime.getTime();
             lastActivityTimestamp = Math.max(lastActivityTimestamp, apiMtime);
         }
         
         if (uiFileExists) {
-            const uiMtime = uiStats.mtime.getTime();
             lastActivityTimestamp = Math.max(lastActivityTimestamp, uiMtime);
         }
         
