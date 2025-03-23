@@ -219,8 +219,39 @@ These tools are implemented using:
 - **simple-git**: For Git repository analysis
 - **path**: For path manipulation
 - **os**: For OS-specific operations
+- **child_process**: For detecting running VS Code instances
 
 The tools are designed to be non-invasive and only analyze files and directories that are already accessible to the system. They do not require any special permissions or extensions to be installed in VS Code.
+
+### Enhanced Workspace Detection
+
+The `get_vscode_workspaces` tool uses multiple methods to automatically detect VS Code workspaces without requiring manual path input:
+
+1. **Storage Files**: Checks multiple storage file locations for different VS Code variants (regular VS Code, VS Code Insiders, VS Code OSS, VSCodium)
+
+2. **Process Detection**: Detects running VS Code processes and extracts workspace paths from command line arguments
+
+3. **Window Titles** (macOS only): Uses AppleScript to get VS Code window titles and extracts workspace paths
+
+4. **Recently Opened Files**: Checks recently opened files in multiple locations
+
+These methods are combined to provide the most comprehensive workspace detection possible. The tool automatically handles URI decoding and filters out non-existent paths.
+
+### Testing Workspace Detection
+
+A test script is included to help diagnose workspace detection issues:
+
+```bash
+node test-workspace-detection.js
+```
+
+This script provides detailed information about the workspace detection process, including:
+
+- Whether VS Code is running
+- Which storage files were found and what workspaces they contain
+- The results of the enhanced workspace detection
+- Detailed information about each detected workspace
+- Suggestions if no workspaces are found
 
 ## Use Cases
 
