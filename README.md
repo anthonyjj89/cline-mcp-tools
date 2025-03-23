@@ -1,16 +1,16 @@
-# Claude Task Reader MCP Server
+# Cline Chat Reader MCP Server
 
-This MCP server allows Claude Desktop to access and search through VS Code task conversations.
+This MCP server allows Claude Desktop to access and search through VS Code chat conversations.
 
 ## Features
 
-- List recent VS Code tasks/conversations
+- List recent VS Code chats/conversations
 - Get conversation history
 - Search across conversations
 - Generate conversation summaries
 - Find code discussions
 - Context-based search with surrounding messages
-- **NEW**: Improved "latest task" detection using file modification times
+- **NEW**: Improved "latest chat" detection using file modification times
 
 ## Installation
 
@@ -18,15 +18,15 @@ The server is already installed and configured. If you need to reinstall or upda
 
 1. Ensure the server files are in the correct location:
    ```
-   /Users/ant/Claude-Task-Reader/
+   /Users/ant/Cline-Chat-Reader/
    ```
 
 2. Make sure the Claude Desktop configuration file is updated:
    ```json
-   "claude-task-reader": {
+   "cline-chat-reader": {
      "command": "node",
      "args": [
-       "/Users/ant/Claude-Task-Reader/build/index.js"
+       "/Users/ant/Cline-Chat-Reader/build/index.js"
      ],
      "disabled": false,
      "autoApprove": []
@@ -40,7 +40,7 @@ The server is already installed and configured. If you need to reinstall or upda
 You can verify that the server is working correctly by running the verification script:
 
 ```bash
-cd /Users/ant/Claude-Task-Reader
+cd /Users/ant/Cline-Chat-Reader
 ./tests/test-claude-integration.js
 ```
 
@@ -59,16 +59,16 @@ The server includes comprehensive test scripts to ensure all features work corre
 Run the automated test suite to verify all features:
 
 ```bash
-cd /Users/ant/Claude-Task-Reader
+cd /Users/ant/Cline-Chat-Reader
 ./tests/test-tools.js
 ```
 
 This will test all tools including:
-- list_recent_tasks
+- list_recent_chats
 - get_last_n_messages
 - search_conversations
 - search_by_context (new context search feature)
-- get_task_by_id
+- get_chat_by_id
 - get_conversation_summary
 - find_code_discussions
 
@@ -77,7 +77,7 @@ This will test all tools including:
 To test the integration with Claude Desktop:
 
 ```bash
-cd /Users/ant/Claude-Task-Reader
+cd /Users/ant/Cline-Chat-Reader
 ./tests/test-claude-integration.js
 ```
 
@@ -132,12 +132,12 @@ If you encounter issues with the MCP server, try the following:
 
 ## Technical Details
 
-The server is implemented as a Node.js application using the Model Context Protocol (MCP). It reads conversation data from the VS Code tasks directory and provides tools for accessing and searching this data.
+The server is implemented as a Node.js application using the Model Context Protocol (MCP). It reads conversation data from the VS Code chats directory and provides tools for accessing and searching this data.
 
 Key files:
 - `index.js`: Main entry point
 - `mcp-server.js`: MCP server implementation
-- `services/task-service.js`: Task-related functionality
+- `services/chat-service.js`: Chat-related functionality
 - `services/conversation-service.js`: Conversation-related functionality
 - `utils/json-streaming.js`: Utilities for streaming JSON data
 - `utils/paths.js`: Path-related utilities
@@ -149,28 +149,28 @@ Key files:
 - Created comprehensive test scripts for all tools
 - Added the new context search feature
 - Improved error handling and reporting
-- Added lastActivityTimestamp feature for better "latest task" detection
+- Added lastActivityTimestamp feature for better "latest chat" detection
 
-## Latest Task Detection
+## Latest Chat Detection
 
-The server now uses a more intelligent method to determine which task is the "latest" one:
+The server now uses a more intelligent method to determine which chat is the "latest" one:
 
-- Previously, tasks were sorted based on their creation timestamp (the folder name)
-- Now, tasks are sorted based on the `lastActivityTimestamp`, which is the most recent modification time of the conversation files
-- This ensures that the most recently active conversation is considered the "latest" task, even if it was created earlier than other conversations
-- All tools now include notes about the `lastActivityTimestamp` to explicitly tell Claude to use it to determine which task is the "latest" one
+- Previously, chats were sorted based on their creation timestamp (the folder name)
+- Now, chats are sorted based on the `lastActivityTimestamp`, which is the most recent modification time of the conversation files
+- This ensures that the most recently active conversation is considered the "latest" chat, even if it was created earlier than other conversations
+- All tools now include notes about the `lastActivityTimestamp` to explicitly tell Claude to use it to determine which chat is the "latest" one
 
-### Testing the Latest Task Detection
+### Testing the Latest Chat Detection
 
-You can test the latest task detection feature by running:
+You can test the latest chat detection feature by running:
 
 ```bash
 cd /Users/ant/claude-dev-mcp
-node test-latest-task-fix.js
+node test-latest-chat-fix.js
 ```
 
 This script will:
-1. Get tasks using the listTasks function
-2. Show tasks sorted by lastActivityTimestamp
-3. Show tasks sorted by directory name (old method)
-4. Verify that tasks are correctly sorted by last activity timestamp
+1. Get chats using the listChats function
+2. Show chats sorted by lastActivityTimestamp
+3. Show chats sorted by directory name (old method)
+4. Verify that chats are correctly sorted by last activity timestamp
