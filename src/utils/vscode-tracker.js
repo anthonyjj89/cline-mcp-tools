@@ -270,6 +270,73 @@ function getRecentlyOpenedFile() {
     }
   }
   
+  // Check for workspaces in the workspaceStorage directory
+  const workspaceStorageDirs = [];
+  
+  if (process.platform === 'darwin') {
+    // macOS
+    workspaceStorageDirs.push(
+      path.join(os.homedir(), 'Library/Application Support/Code/User/workspaceStorage'),
+      path.join(os.homedir(), 'Library/Application Support/Code - Insiders/User/workspaceStorage'),
+      path.join(os.homedir(), 'Library/Application Support/Code - OSS/User/workspaceStorage'),
+      path.join(os.homedir(), 'Library/Application Support/VSCodium/User/workspaceStorage')
+    );
+  } else if (process.platform === 'win32') {
+    // Windows
+    workspaceStorageDirs.push(
+      path.join(os.homedir(), 'AppData/Roaming/Code/User/workspaceStorage'),
+      path.join(os.homedir(), 'AppData/Roaming/Code - Insiders/User/workspaceStorage'),
+      path.join(os.homedir(), 'AppData/Roaming/Code - OSS/User/workspaceStorage'),
+      path.join(os.homedir(), 'AppData/Roaming/VSCodium/User/workspaceStorage')
+    );
+  } else {
+    // Linux and others
+    workspaceStorageDirs.push(
+      path.join(os.homedir(), '.config/Code/User/workspaceStorage'),
+      path.join(os.homedir(), '.config/Code - Insiders/User/workspaceStorage'),
+      path.join(os.homedir(), '.config/Code - OSS/User/workspaceStorage'),
+      path.join(os.homedir(), '.config/VSCodium/User/workspaceStorage')
+    );
+  }
+  
+  // Check each workspaceStorage directory
+  for (const workspaceStorageDir of workspaceStorageDirs) {
+    try {
+      if (fs.existsSync(workspaceStorageDir)) {
+        // Get all subdirectories (each represents a workspace)
+        const workspaceDirs = fs.readdirSync(workspaceStorageDir)
+          .filter(dir => !dir.startsWith('.')) // Skip hidden files
+          .map(dir => path.join(workspaceStorageDir, dir));
+        
+        // Check each workspace directory for workspace.json
+        for (const workspaceDir of workspaceDirs) {
+          const workspaceJsonPath = path.join(workspaceDir, 'workspace.json');
+          
+          if (fs.existsSync(workspaceJsonPath)) {
+            try {
+              // Read the workspace.json file
+              const workspaceJson = fs.readFileSync(workspaceJsonPath, 'utf8');
+              
+              // Extract the folder or workspace URI
+              const folderMatch = workspaceJson.match(/folder":\s*"file:\/\/([^"]+)"/);
+              const workspaceMatch = workspaceJson.match(/workspace":\s*"file:\/\/([^"]+)"/);
+              
+              if (folderMatch && folderMatch[1]) {
+                workspaces.push(decodeURIComponent(folderMatch[1]));
+              } else if (workspaceMatch && workspaceMatch[1]) {
+                workspaces.push(decodeURIComponent(workspaceMatch[1]));
+              }
+            } catch (error) {
+              console.debug(`Error reading workspace.json file ${workspaceJsonPath}:`, error);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.debug(`Error reading workspaceStorage directory ${workspaceStorageDir}:`, error);
+    }
+  }
+  
   return workspaces;
 }
 
