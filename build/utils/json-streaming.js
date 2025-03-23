@@ -3,16 +3,12 @@
  * Provides memory-efficient processing of large JSON files
  */
 import fs from 'fs';
-import { createRequire } from 'module';
+import parserPkg from 'stream-json/Parser.js';
+import streamArrayPkg from 'stream-json/streamers/StreamArray.js';
+import { chain } from 'stream-chain';
 
-// Create a require function
-const require = createRequire(import.meta.url);
-
-// Use require to import CommonJS modules
-const Parser = require('stream-json/Parser');
-const { streamArray } = require('stream-json/streamers/StreamArray');
-const { chain } = require('stream-chain');
-
+const Parser = parserPkg.Parser;
+const StreamArray = streamArrayPkg.StreamArray;
 /**
  * Stream and filter a JSON array file, processing one item at a time
  * @param filePath Path to the JSON file containing an array
@@ -22,72 +18,60 @@ const { chain } = require('stream-chain');
  */
 export function streamJsonArray(filePath, options = {}, filterFn) {
     return new Promise((resolve, reject) => {
-        try {
-            // Default values
-            const limit = options.limit || 1000; // Default to 1000 messages
-            const since = options.since || 0;
-            const search = options.search ? options.search.toLowerCase() : undefined;
-            // Create the results array
-            const results = [];
-            
-            // Create the streaming pipeline
-            const pipeline = chain([
-                fs.createReadStream(filePath),
-                new Parser({ jsonStreaming: true }),
-                streamArray(),
-                (data) => {
-                    // Extract the actual value from the StreamArray output
-                    const item = data.value;
-                    // Apply timestamp filter if specified and if the item has a timestamp property
-                    if (since > 0 && 'timestamp' in item && item.timestamp < since) {
-                        return null;
-                    }
-                    // Apply search filter if specified and if the item has a content property
-                    if (search && 'content' in item) {
-                        const content = item.content;
-                        // Handle different content types (string or object)
-                        const contentStr = typeof content === 'string'
-                            ? content
-                            : JSON.stringify(content);
-                        if (!contentStr.toLowerCase().includes(search)) {
-                            return null;
-                        }
-                    }
-                    // Apply custom filter function if provided
-                    if (filterFn && !filterFn(item)) {
-                        return null;
-                    }
-                    // We want to collect all items and sort them later
-                    // (removed the limit check here)
-                    return item;
+        // Default values
+        const limit = options.limit || 1000; // Default to 1000 messages
+        const since = options.since || 0;
+        const search = options.search ? options.search.toLowerCase() : undefined;
+        // Create the results array
+        const results = [];
+        // Create the streaming pipeline
+        const pipeline = chain([
+            fs.createReadStream(filePath),
+            new Parser({ jsonStreaming: true }),
+            new StreamArray(),
+            (data) => {
+                // Extract the actual value from the StreamArray output
+                const item = data.value;
+                // Apply timestamp filter if specified and if the item has a timestamp property
+                if (since > 0 && 'timestamp' in item && item.timestamp < since) {
+                    return null;
                 }
-            ]);
-            
-            // Handle data, end, and error events
-            pipeline.on('data', (item) => {
-                // Collect all items, we'll limit after sorting
+                // Apply search filter if specified and if the item has a content property
+                if (search && 'content' in item) {
+                    const content = item.content;
+                    // Handle different content types (string or object)
+                    const contentStr = typeof content === 'string'
+                        ? content
+                        : JSON.stringify(content);
+                    if (!contentStr.toLowerCase().includes(search)) {
+                        return null;
+                    }
+                }
+                // Apply custom filter function if provided
+                if (filterFn && !filterFn(item)) {
+                    return null;
+                }
+                // If we've reached the limit, skip this item
+                if (results.length >= limit) {
+                    return null;
+                }
+                return item;
+            }
+        ]);
+        // Handle data, end, and error events
+        pipeline.on('data', (item) => {
+            if (results.length < limit) {
                 results.push(item);
-            });
-            
-            pipeline.on('end', () => {
-                // Sort by timestamp in descending order (newest first) if items have timestamps
-                if (results.length > 0 && 'timestamp' in results[0]) {
-                    results.sort((a, b) => b.timestamp - a.timestamp);
-                }
-                
-                // Return only the requested number of items
-                resolve(results.slice(0, limit));
-            });
-            
-            pipeline.on('error', (err) => {
-                reject(new Error(`Error streaming JSON file: ${err.message}`));
-            });
-        } catch (error) {
-            reject(new Error(`Error setting up JSON array stream: ${error.message}`));
-        }
+            }
+        });
+        pipeline.on('end', () => {
+            resolve(results);
+        });
+        pipeline.on('error', (err) => {
+            reject(new Error(`Error streaming JSON file: ${err.message}`));
+        });
     });
 }
-
 /**
  * Stream a JSON file and extract a specific property or apply a transformation
  * @param filePath Path to the JSON file
@@ -97,52 +81,43 @@ export function streamJsonArray(filePath, options = {}, filterFn) {
  */
 export function streamJsonProperty(filePath, propertyPath, limit = 1000) {
     return new Promise((resolve, reject) => {
-        try {
-            const results = [];
-            let count = 0;
-            // Split the property path into parts
-            const pathParts = propertyPath.split('.');
-            
-            const pipeline = chain([
-                fs.createReadStream(filePath),
-                new Parser({ jsonStreaming: true }),
-                (data) => {
-                    // Extract the specified property
-                    let value = data.value;
-                    // Navigate through the property path
-                    for (const part of pathParts) {
-                        if (value && typeof value === 'object' && part in value) {
-                            value = value[part];
-                        }
-                        else {
-                            value = undefined;
-                            break;
-                        }
+        const results = [];
+        let count = 0;
+        // Split the property path into parts
+        const pathParts = propertyPath.split('.');
+        const pipeline = chain([
+            fs.createReadStream(filePath),
+            new Parser({ jsonStreaming: true }),
+            (data) => {
+                // Extract the specified property
+                let value = data.value;
+                // Navigate through the property path
+                for (const part of pathParts) {
+                    if (value && typeof value === 'object' && part in value) {
+                        value = value[part];
                     }
-                    return value;
+                    else {
+                        value = undefined;
+                        break;
+                    }
                 }
-            ]);
-            
-            pipeline.on('data', (value) => {
-                if (value !== undefined && count < limit) {
-                    results.push(value);
-                    count++;
-                }
-            });
-            
-            pipeline.on('end', () => {
-                resolve(results);
-            });
-            
-            pipeline.on('error', (err) => {
-                reject(new Error(`Error streaming JSON property: ${err.message}`));
-            });
-        } catch (error) {
-            reject(new Error(`Error setting up JSON property stream: ${error.message}`));
-        }
+                return value;
+            }
+        ]);
+        pipeline.on('data', (value) => {
+            if (value !== undefined && count < limit) {
+                results.push(value);
+                count++;
+            }
+        });
+        pipeline.on('end', () => {
+            resolve(results);
+        });
+        pipeline.on('error', (err) => {
+            reject(new Error(`Error streaming JSON property: ${err.message}`));
+        });
     });
 }
-
 /**
  * Count the number of items in a JSON array file
  * @param filePath Path to the JSON file containing an array
@@ -150,32 +125,23 @@ export function streamJsonProperty(filePath, propertyPath, limit = 1000) {
  */
 export function countJsonArrayItems(filePath) {
     return new Promise((resolve, reject) => {
-        try {
-            let count = 0;
-            
-            const pipeline = chain([
-                fs.createReadStream(filePath),
-                new Parser({ jsonStreaming: true }),
-                streamArray()
-            ]);
-            
-            pipeline.on('data', () => {
-                count++;
-            });
-            
-            pipeline.on('end', () => {
-                resolve(count);
-            });
-            
-            pipeline.on('error', (err) => {
-                reject(new Error(`Error counting JSON array items: ${err.message}`));
-            });
-        } catch (error) {
-            reject(new Error(`Error setting up JSON array count: ${error.message}`));
-        }
+        let count = 0;
+        const pipeline = chain([
+            fs.createReadStream(filePath),
+            new Parser({ jsonStreaming: true }),
+            new StreamArray()
+        ]);
+        pipeline.on('data', () => {
+            count++;
+        });
+        pipeline.on('end', () => {
+            resolve(count);
+        });
+        pipeline.on('error', (err) => {
+            reject(new Error(`Error counting JSON array items: ${err.message}`));
+        });
     });
 }
-
 /**
  * Search for a term within a JSON array file
  * @param filePath Path to the JSON file containing an array
@@ -186,52 +152,43 @@ export function countJsonArrayItems(filePath) {
  */
 export function searchJsonArray(filePath, searchTerm, contextLength = 100, limit = 20) {
     return new Promise((resolve, reject) => {
-        try {
-            const results = [];
-            const lowerSearchTerm = searchTerm.toLowerCase();
-            
-            const pipeline = chain([
-                fs.createReadStream(filePath),
-                new Parser({ jsonStreaming: true }),
-                streamArray(),
-                (data) => data.value
-            ]);
-            
-            pipeline.on('data', (item) => {
-                if (results.length >= limit)
-                    return;
-                // Convert item to string for searching
-                const itemStr = JSON.stringify(item);
-                // Check if the item contains the search term
-                const lowerItemStr = itemStr.toLowerCase();
-                if (lowerItemStr.includes(lowerSearchTerm)) {
-                    // Create a snippet with context
-                    const index = lowerItemStr.indexOf(lowerSearchTerm);
-                    const start = Math.max(0, index - contextLength);
-                    const end = Math.min(itemStr.length, index + searchTerm.length + contextLength);
-                    let snippet = '';
-                    if (start > 0)
-                        snippet += '...';
-                    snippet += itemStr.substring(start, end);
-                    if (end < itemStr.length)
-                        snippet += '...';
-                    results.push({ item, snippet });
-                }
-            });
-            
-            pipeline.on('end', () => {
-                resolve(results);
-            });
-            
-            pipeline.on('error', (err) => {
-                reject(new Error(`Error searching JSON array: ${err.message}`));
-            });
-        } catch (error) {
-            reject(new Error(`Error setting up JSON array search: ${error.message}`));
-        }
+        const results = [];
+        const lowerSearchTerm = searchTerm.toLowerCase();
+        const pipeline = chain([
+            fs.createReadStream(filePath),
+            new Parser({ jsonStreaming: true }),
+            new StreamArray(),
+            (data) => data.value
+        ]);
+        pipeline.on('data', (item) => {
+            if (results.length >= limit)
+                return;
+            // Convert item to string for searching
+            const itemStr = JSON.stringify(item);
+            // Check if the item contains the search term
+            const lowerItemStr = itemStr.toLowerCase();
+            if (lowerItemStr.includes(lowerSearchTerm)) {
+                // Create a snippet with context
+                const index = lowerItemStr.indexOf(lowerSearchTerm);
+                const start = Math.max(0, index - contextLength);
+                const end = Math.min(itemStr.length, index + searchTerm.length + contextLength);
+                let snippet = '';
+                if (start > 0)
+                    snippet += '...';
+                snippet += itemStr.substring(start, end);
+                if (end < itemStr.length)
+                    snippet += '...';
+                results.push({ item, snippet });
+            }
+        });
+        pipeline.on('end', () => {
+            resolve(results);
+        });
+        pipeline.on('error', (err) => {
+            reject(new Error(`Error searching JSON array: ${err.message}`));
+        });
     });
 }
-
 /**
  * Extract a snippet of text around a search term
  * @param content Message content
