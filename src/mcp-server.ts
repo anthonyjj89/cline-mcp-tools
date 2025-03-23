@@ -11,6 +11,19 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
+import fs from 'fs-extra';
+import path from 'path';
+// Import VS Code monitoring tools
+import {
+  GetVSCodeWorkspacesSchema,
+  AnalyzeWorkspaceSchema,
+  GetFileHistorySchema,
+  AnalyzeCloneActivitySchema,
+  registerVSCodeMonitoringTools
+} from './vscode-monitoring.js';
+import { getVSCodeWorkspaces, getRecentlyModifiedFiles } from './utils/vscode-tracker.js';
+import { getRecentChanges, getFileHistory, findGitRepository } from './utils/git-analyzer.js';
+import { getWorkspaceSettings, getWorkspaceInfo, getLaunchConfigurations, getRecommendedExtensions } from './utils/vscode-settings.js';
 import { z } from 'zod';
 import { getVSCodeTasksDirectory } from './utils/paths.js';
 import {
@@ -103,6 +116,65 @@ export async function initMcpServer(tasksDir: string): Promise<Server> {
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
       tools: [
+        // VS Code monitoring tools
+        {
+          name: 'get_vscode_workspaces',
+          description: 'Get a list of recently opened VS Code workspaces',
+          inputSchema: {
+            type: 'object',
+            properties: {},
+            required: []
+          }
+        },
+        {
+          name: 'analyze_workspace',
+          description: 'Analyze a specific VS Code workspace',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              workspacePath: {
+                type: 'string',
+                description: 'Path to the workspace to analyze'
+              },
+              hoursBack: {
+                type: 'number',
+                description: 'How many hours back to look for modified files (default: 24)',
+                default: 24
+              }
+            },
+            required: ['workspacePath']
+          }
+        },
+        {
+          name: 'get_file_history',
+          description: 'Get Git history for a specific file',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              filePath: {
+                type: 'string',
+                description: 'Path to the file to get history for'
+              }
+            },
+            required: ['filePath']
+          }
+        },
+        {
+          name: 'analyze_cline_activity',
+          description: 'Analyze recent VS Code activity across all workspaces',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              hoursBack: {
+                type: 'number',
+                description: 'How many hours back to look for activity (default: 24)',
+                default: 24
+              }
+            },
+            required: []
+          }
+        },
+        // Original tools
         {
           name: 'get_last_n_messages',
           description: 'Retrieve the last N messages from a conversation',
@@ -239,6 +311,20 @@ export async function initMcpServer(tasksDir: string): Promise<Server> {
     
     try {
       switch (name) {
+        // VS Code monitoring tools
+        case 'get_vscode_workspaces':
+          return await handleGetVSCodeWorkspaces(args);
+        
+        case 'analyze_workspace':
+          return await handleAnalyzeWorkspace(args);
+        
+        case 'get_file_history':
+          return await handleGetFileHistory(args);
+        
+        case 'analyze_cline_activity':
+          return await handleAnalyzeCloneActivity(args);
+        
+        // Original tools
         case 'get_last_n_messages':
           return await handleGetLastNMessages(tasksDir, args);
         
@@ -462,6 +548,207 @@ async function handleSearchConversations(tasksDir: string, args: unknown) {
           search_term,
           result_count: results.length,
           results
+        }, null, 2),
+      },
+    ],
+  };
+}
+
+/**
+ * Handle get_vscode_workspaces tool call
+ */
+async function handleGetVSCodeWorkspaces(args: unknown) {
+  const _ = GetVSCodeWorkspacesSchema.parse(args);
+  
+  // Get VS Code workspaces
+  const workspaces = getVSCodeWorkspaces();
+  
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify({
+          workspaces,
+          count: workspaces.length
+        }, null, 2),
+      },
+    ],
+  };
+}
+
+/**
+ * Handle analyze_workspace tool call
+ */
+async function handleAnalyzeWorkspace(args: unknown) {
+  const { workspacePath, hoursBack } = AnalyzeWorkspaceSchema.parse(args);
+  
+  // Check if the workspace exists
+  if (!fs.existsSync(workspacePath)) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      `Workspace path does not exist: ${workspacePath}`
+    );
+  }
+  
+  // Get workspace info
+  const workspaceInfo = getWorkspaceInfo(workspacePath);
+  
+  // Get VS Code settings
+  const settings = getWorkspaceSettings(workspacePath);
+  
+  // Get launch configurations
+  const launchConfig = getLaunchConfigurations(workspacePath);
+  
+  // Get recommended extensions
+  const extensions = getRecommendedExtensions(workspacePath);
+  
+  // Get Git info if it's a repo
+  const gitInfo = await getRecentChanges(workspacePath);
+  
+  // Get recently modified files
+  const recentFiles = getRecentlyModifiedFiles(workspacePath, hoursBack);
+  
+  // Group files by type for better analysis
+  const filesByType: Record<string, any[]> = {};
+  recentFiles.forEach(file => {
+    const ext = file.extension || 'unknown';
+    if (!filesByType[ext]) filesByType[ext] = [];
+    filesByType[ext].push(file);
+  });
+  
+  // Prepare the result
+  const result = {
+    workspace: workspaceInfo,
+    settings,
+    launchConfig,
+    extensions,
+    gitInfo,
+    recentFiles: {
+      count: recentFiles.length,
+      byType: filesByType,
+      mostRecent: recentFiles.slice(0, 10) // Just the 10 most recent
+    }
+  };
+  
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+}
+
+/**
+ * Handle get_file_history tool call
+ */
+async function handleGetFileHistory(args: unknown) {
+  const { filePath } = GetFileHistorySchema.parse(args);
+  
+  // Check if the file exists
+  if (!fs.existsSync(filePath)) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      `File does not exist: ${filePath}`
+    );
+  }
+  
+  // Try to find the Git repo that contains this file
+  const repoPath = findGitRepository(filePath);
+  
+  if (repoPath) {
+    // Get Git history for the file
+    const history = await getFileHistory(repoPath, filePath);
+    
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(history, null, 2),
+        },
+      ],
+    };
+  }
+  
+  // If not in a Git repo, just return file info
+  try {
+    const stats = fs.statSync(filePath);
+    
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            isGitRepo: false,
+            fileInfo: {
+              path: filePath,
+              lastModified: stats.mtime,
+              size: stats.size,
+              created: stats.birthtime
+            }
+          }, null, 2),
+        },
+      ],
+    };
+  } catch (error) {
+    throw new McpError(
+      ErrorCode.InternalError,
+      `Failed to get file info: ${(error as Error).message}`
+    );
+  }
+}
+
+/**
+ * Handle analyze_cline_activity tool call
+ */
+async function handleAnalyzeCloneActivity(args: unknown) {
+  const { hoursBack } = AnalyzeCloneActivitySchema.parse(args);
+  
+  // Get all VS Code workspaces
+  const workspaces = getVSCodeWorkspaces();
+  
+  const results = [];
+  
+  for (const workspace of workspaces) {
+    // Skip if not a real path
+    if (!fs.existsSync(workspace)) continue;
+    
+    // Get workspace info
+    const workspaceInfo = getWorkspaceInfo(workspace);
+    
+    // Check if it's a Git repo
+    const gitInfo = await getRecentChanges(workspace);
+    
+    // Get recently modified files
+    const recentFiles = getRecentlyModifiedFiles(workspace, hoursBack);
+    
+    // Only include workspaces with recent activity
+    if (recentFiles.length > 0 || (gitInfo.isGitRepo && gitInfo.commits && gitInfo.commits.length > 0)) {
+      results.push({
+        workspace: workspaceInfo,
+        path: workspace,
+        gitInfo,
+        recentFileCount: recentFiles.length,
+        mostRecentFiles: recentFiles.slice(0, 5).map(f => ({
+          path: path.relative(workspace, f.path),
+          lastModified: f.lastModified
+        }))
+      });
+    }
+  }
+  
+  // Sort results by number of recent files (most active first)
+  results.sort((a, b) => b.recentFileCount - a.recentFileCount);
+  
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify({
+          timestamp: new Date().toISOString(),
+          workspaceCount: results.length,
+          workspaces: results
         }, null, 2),
       },
     ],
