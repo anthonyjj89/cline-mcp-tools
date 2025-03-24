@@ -7,7 +7,7 @@
  * to show the actual changes between commits or between the working directory and HEAD.
  */
 
-import { getGitDiff, findGitRepository } from './build/utils/git-analyzer.js';
+import { getGitDiff, findGitRepository } from '../../../build/utils/git-analyzer.js';
 import path from 'path';
 import fs from 'fs';
 

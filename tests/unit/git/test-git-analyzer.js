@@ -7,7 +7,7 @@
  * to get information about Git repositories.
  */
 
-import { getRecentChanges, getFileHistory, findGitRepository } from './build/utils/git-analyzer.js';
+import { getRecentChanges, getFileHistory, findGitRepository } from '../../../build/utils/git-analyzer.js';
 import path from 'path';
 import fs from 'fs';
 

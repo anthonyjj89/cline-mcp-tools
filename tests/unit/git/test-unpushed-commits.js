@@ -7,7 +7,7 @@
  * to show commits that exist locally but have not been pushed to the remote repository.
  */
 
-import { getUnpushedCommits, findGitRepository } from './build/utils/git-analyzer.js';
+import { getUnpushedCommits, findGitRepository } from '../../../build/utils/git-analyzer.js';
 import path from 'path';
 import fs from 'fs';
 

@@ -8,7 +8,7 @@
  * staged, and untracked files.
  */
 
-import { getUncommittedChanges, findGitRepository } from './build/utils/git-analyzer.js';
+import { getUncommittedChanges, findGitRepository } from '../../../build/utils/git-analyzer.js';
 import path from 'path';
 import fs from 'fs';
 
