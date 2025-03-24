@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed "Parser is not a constructor" error in json-streaming.ts by updating import syntax
 - Fixed MCP server disconnection issue by properly importing CommonJS modules in json-streaming.ts
 - Fixed remaining Parser import issues in conversation-analyzer.ts to resolve conversation analysis tool errors
+- Improved CommonJS module imports using Node.js createRequire for better compatibility and reliability
 
 ## [0.2.0] - 2025-03-24
 
