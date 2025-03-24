@@ -21,6 +21,11 @@ import {
   searchJsonArray,
   extractSnippet 
 } from '../utils/json-streaming.js';
+import {
+  readJsonArray,
+  searchJsonArrayDirect,
+  countJsonArrayItemsDirect
+} from '../utils/json-fallback.js';
 
 /**
  * Get conversation history for a task with filtering options
@@ -45,10 +50,16 @@ export async function getConversationHistory(
     // Get the file path
     const apiFilePath = getApiConversationFilePath(tasksDir, taskId);
     
-    // Stream and filter the JSON file
-    const messages = await streamJsonArray<Message>(apiFilePath, options, filterFn);
-    
-    return messages;
+    try {
+      // Try streaming first (original method)
+      return await streamJsonArray<Message>(apiFilePath, options, filterFn);
+    } catch (error: unknown) {
+      const streamError = error as Error;
+      console.warn(`Streaming failed, falling back to direct read: ${streamError.message}`);
+      
+      // Fallback to direct reading if streaming fails
+      return await readJsonArray<Message>(apiFilePath, options, filterFn);
+    }
   } catch (error) {
     console.error(`Error getting conversation history for task ${taskId}:`, error);
     throw new Error(`Failed to get conversation history: ${(error as Error).message}`);
@@ -126,13 +137,27 @@ export async function searchConversations(
         
         const apiFilePath = getApiConversationFilePath(tasksDir, taskId);
         
-        // Use searchJsonArray for efficient streaming search
-        const searchResults = await searchJsonArray<Message>(
-          apiFilePath, 
-          searchTerm, 
-          100, // Context length
-          limit - results.length // How many more results we need
-        );
+        let searchResults;
+        try {
+          // Try streaming search first
+          searchResults = await searchJsonArray<Message>(
+            apiFilePath, 
+            searchTerm, 
+            100, // Context length
+            limit - results.length // How many more results we need
+          );
+        } catch (error: unknown) {
+          const streamError = error as Error;
+          console.warn(`Streaming search failed, falling back to direct search: ${streamError.message}`);
+          
+          // Fallback to direct search
+          searchResults = await searchJsonArrayDirect<Message>(
+            apiFilePath,
+            searchTerm,
+            100,
+            limit - results.length
+          );
+        }
         
         // Convert to our SearchResult format
         const formattedResults = searchResults.map(({ item, snippet }) => ({
