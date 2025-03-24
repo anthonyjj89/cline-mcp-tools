@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Script to restart Claude Desktop to apply the improved Parser import fixes
-# This script will restart Claude Desktop and apply the createRequire fixes for the conversation analysis tools
+# Script to restart Claude Desktop to apply the improved Parser import fixes and fallback solution
+# This script will restart Claude Desktop and apply the createRequire fixes and fallback JSON parsing for the conversation analysis tools
 
-echo "Restarting Claude Desktop to apply improved Parser import fixes using createRequire..."
+echo "Restarting Claude Desktop to apply improved Parser import fixes and fallback JSON parsing solution..."
 
 # Kill the Claude Desktop process if it's running
 pkill -f "Claude"
