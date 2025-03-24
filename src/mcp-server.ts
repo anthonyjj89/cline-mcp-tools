@@ -22,8 +22,9 @@ import {
   registerVSCodeMonitoringTools
 } from './vscode-monitoring.js';
 import { getVSCodeWorkspaces, getRecentlyModifiedFiles } from './utils/vscode-tracker.js';
-import { getRecentChanges, getFileHistory, findGitRepository, getGitDiff } from './utils/git-analyzer.js';
+import { getRecentChanges, getFileHistory, findGitRepository, getGitDiff, getUnpushedCommits, getUncommittedChanges } from './utils/git-analyzer.js';
 import { getWorkspaceSettings, getWorkspaceInfo, getLaunchConfigurations, getRecommendedExtensions } from './utils/vscode-settings.js';
+import { formatTimestamps, formatHumanReadable, getCurrentTime } from './utils/time-utils.js';
 import { z } from 'zod';
 import { getVSCodeTasksDirectory, getApiConversationFilePath } from './utils/paths.js';
 import {
@@ -105,6 +106,14 @@ const GetGitDiffSchema = z.object({
   filePath: z.string().describe('Path to the file to get diff for'),
   oldRef: z.string().optional().describe('Old Git reference (commit hash, branch, etc.)'),
   newRef: z.string().optional().describe('New Git reference (commit hash, branch, etc.)')
+});
+
+const GetUnpushedCommitsSchema = z.object({
+  repoPath: z.string().describe('Path to the Git repository')
+});
+
+const GetUncommittedChangesSchema = z.object({
+  repoPath: z.string().describe('Path to the Git repository')
 });
 
 /**
@@ -354,6 +363,34 @@ export async function initMcpServer(tasksDir: string): Promise<Server> {
             },
             required: ['filePath']
           }
+        },
+        {
+          name: 'get_unpushed_commits',
+          description: 'Get commits that exist locally but have not been pushed to the remote repository',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              repoPath: {
+                type: 'string',
+                description: 'Path to the Git repository'
+              }
+            },
+            required: ['repoPath']
+          }
+        },
+        {
+          name: 'get_uncommitted_changes',
+          description: 'Get all uncommitted changes in a Git repository including modified, staged, and untracked files',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              repoPath: {
+                type: 'string',
+                description: 'Path to the Git repository'
+              }
+            },
+            required: ['repoPath']
+          }
         }
       ]
     };
@@ -405,6 +442,12 @@ export async function initMcpServer(tasksDir: string): Promise<Server> {
         
         case 'get_git_diff':
           return await handleGetGitDiff(args);
+        
+        case 'get_unpushed_commits':
+          return await handleGetUnpushedCommits(args);
+        
+        case 'get_uncommitted_changes':
+          return await handleGetUncommittedChanges(args);
         
         default:
           throw new McpError(
@@ -483,7 +526,7 @@ async function handleGetMessagesSince(tasksDir: string, args: unknown) {
         type: 'text',
         text: JSON.stringify({
           task_id,
-          since: new Date(since).toISOString(),
+          since: formatTimestamps(since),
           message_count: messages.length,
           messages
         }, null, 2),
@@ -743,9 +786,9 @@ async function handleGetFileHistory(args: unknown) {
             isGitRepo: false,
             fileInfo: {
               path: filePath,
-              lastModified: stats.mtime,
+              lastModified: formatTimestamps(stats.mtime),
               size: stats.size,
-              created: stats.birthtime
+              created: formatTimestamps(stats.birthtime)
             }
           }, null, 2),
         },
@@ -792,7 +835,7 @@ async function handleAnalyzeCloneActivity(args: unknown) {
         recentFileCount: recentFiles.length,
         mostRecentFiles: recentFiles.slice(0, 5).map(f => ({
           path: path.relative(workspace, f.path),
-          lastModified: f.lastModified
+          lastModified: formatTimestamps(f.lastModified)
         }))
       });
     }
@@ -806,7 +849,7 @@ async function handleAnalyzeCloneActivity(args: unknown) {
       {
         type: 'text',
         text: JSON.stringify({
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentTime(),
           workspaceCount: results.length,
           workspaces: results
         }, null, 2),
@@ -837,6 +880,10 @@ async function handleAnalyzeConversation(tasksDir: string, args: unknown) {
         text: JSON.stringify({
           task_id,
           time_window: minutes_back ? `last ${minutes_back} minutes` : 'all',
+          time_info: minutes_back ? {
+            since: formatTimestamps(since),
+            now: getCurrentTime()
+          } : null,
           analysis
         }, null, 2),
       },
@@ -883,6 +930,60 @@ async function handleGetGitDiff(args: unknown) {
       {
         type: 'text',
         text: JSON.stringify(diff, null, 2),
+      },
+    ],
+  };
+}
+
+/**
+ * Handle get_unpushed_commits tool call
+ */
+async function handleGetUnpushedCommits(args: unknown) {
+  const { repoPath } = GetUnpushedCommitsSchema.parse(args);
+  
+  // Check if the repository exists
+  if (!fs.existsSync(repoPath)) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      `Repository path does not exist: ${repoPath}`
+    );
+  }
+  
+  // Get unpushed commits
+  const unpushedInfo = await getUnpushedCommits(repoPath);
+  
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(unpushedInfo, null, 2),
+      },
+    ],
+  };
+}
+
+/**
+ * Handle get_uncommitted_changes tool call
+ */
+async function handleGetUncommittedChanges(args: unknown) {
+  const { repoPath } = GetUncommittedChangesSchema.parse(args);
+  
+  // Check if the repository exists
+  if (!fs.existsSync(repoPath)) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      `Repository path does not exist: ${repoPath}`
+    );
+  }
+  
+  // Get uncommitted changes
+  const uncommittedInfo = await getUncommittedChanges(repoPath);
+  
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(uncommittedInfo, null, 2),
       },
     ],
   };

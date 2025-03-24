@@ -5,6 +5,24 @@ All notable changes to the Cline Chat Reader MCP Server will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-03-24
+
+### Added
+- Time utilities for consistent timestamp formatting with time zone awareness
+- Git analysis tools for detecting unpushed commits and uncommitted changes
+- VS Code monitoring and workspace analysis features
+- Conversation analyzer for extracting key information from chats
+- File history retrieval with Git integration
+
+### Changed
+- Enhanced MCP server responses with comprehensive time information
+- Improved timestamp handling in all handlers with proper time zone information
+- Added human-readable time difference calculations
+
+### Upcoming
+- File consolidation: Moving all project files to ensure everything is in one place
+- Comprehensive testing: Developing a more robust testing strategy
+
 ## [0.1.1] - 2025-03-23
 
 ### Changed

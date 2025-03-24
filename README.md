@@ -10,7 +10,11 @@ This MCP server allows Claude Desktop to access and search through VS Code chat 
 - Generate conversation summaries
 - Find code discussions
 - Context-based search with surrounding messages
-- **NEW**: Improved "latest chat" detection using file modification times
+- Improved "latest chat" detection using file modification times
+- **NEW**: Time utilities with proper time zone handling
+- **NEW**: Git analysis tools (unpushed commits, uncommitted changes)
+- **NEW**: VS Code workspace monitoring and analysis
+- **NEW**: Conversation analyzer for extracting key information
 
 ## Installation
 
@@ -174,3 +178,65 @@ This script will:
 2. Show chats sorted by lastActivityTimestamp
 3. Show chats sorted by directory name (old method)
 4. Verify that chats are correctly sorted by last activity timestamp
+
+## New Features in v0.2.0
+
+### Time Utilities
+
+The server now includes comprehensive time utilities for consistent timestamp formatting with proper time zone awareness:
+
+- **Consistent Time Formatting**: All timestamps in MCP server responses are formatted consistently
+- **Time Zone Awareness**: All timestamps include time zone information for correct interpretation
+- **Human-Readable Timestamps**: Timestamps are presented in both machine-readable and human-readable formats
+- **Time Difference Calculation**: Easy calculation of time differences in a human-readable format
+
+You can test the time utilities by running:
+
+```bash
+node test-time-utilities.js
+```
+
+### Git Analysis Tools
+
+New Git analysis tools have been added to provide insights into Git repositories:
+
+- **Unpushed Commits**: Detect commits that exist locally but haven't been pushed to a remote repository
+- **Uncommitted Changes**: Show all uncommitted changes including modified, staged, and untracked files
+- **Git Diff**: Get detailed diff information for specific files
+- **File History**: Retrieve the Git history for specific files
+
+You can test these features with:
+
+```bash
+node test-unpushed-commits.js /path/to/git/repo
+node test-uncommitted-changes.js /path/to/git/repo
+```
+
+### VS Code Workspace Analysis
+
+The server can now analyze VS Code workspaces to provide insights about:
+
+- Recently opened workspaces
+- Workspace settings and configurations
+- Recently modified files
+- Git repository information
+- Recommended extensions
+
+## Upcoming Tasks
+
+The following tasks are planned for future versions:
+
+### File Consolidation
+
+- Move all project files from previous directories to ensure everything is in one place
+- Organize scripts and utilities in a consistent directory structure
+- Update all references to file paths in the code
+- Create a clean project structure for better maintainability
+
+### Comprehensive Testing
+
+- Develop a more robust testing strategy for all components
+- Create unit tests for individual modules
+- Implement integration tests for the MCP server
+- Set up end-to-end tests with Claude Desktop
+- Document test procedures and expected results
