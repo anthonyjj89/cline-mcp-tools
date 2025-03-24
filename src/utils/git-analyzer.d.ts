@@ -115,3 +115,67 @@ export function getGitDiff(
   oldRef?: string, 
   newRef?: string
 ): Promise<GitDiffInfo>;
+
+/**
+ * Git unpushed commits information
+ */
+export interface GitUnpushedInfo {
+  isGitRepo: boolean;
+  hasRemote?: boolean;
+  hasUpstream?: boolean;
+  branch?: string;
+  unpushedCount?: number;
+  commits?: GitCommit[];
+  message?: string;
+  error?: string;
+}
+
+/**
+ * Get unpushed commits in a Git repository
+ * @param repoPath - Path to the repository
+ * @returns Information about unpushed commits
+ */
+export function getUnpushedCommits(repoPath: string): Promise<GitUnpushedInfo>;
+
+/**
+ * Git file change information
+ */
+export interface GitFileChange {
+  path: string;
+  status: 'modified' | 'created' | 'renamed' | 'deleted';
+  staged: boolean;
+  diff?: string;
+  error?: string;
+}
+
+/**
+ * Git uncommitted changes summary
+ */
+export interface GitUncommittedSummary {
+  hasChanges: boolean;
+  modifiedCount: number;
+  stagedCount: number;
+  untrackedCount: number;
+  deletedCount?: number;
+  totalChanges: number;
+}
+
+/**
+ * Git uncommitted changes information
+ */
+export interface GitUncommittedInfo {
+  isGitRepo: boolean;
+  branch?: string;
+  summary?: GitUncommittedSummary;
+  modified?: GitFileChange[];
+  staged?: GitFileChange[];
+  untracked?: string[];
+  error?: string;
+}
+
+/**
+ * Get uncommitted changes in a Git repository
+ * @param repoPath - Path to the repository
+ * @returns Information about uncommitted changes
+ */
+export function getUncommittedChanges(repoPath: string): Promise<GitUncommittedInfo>;

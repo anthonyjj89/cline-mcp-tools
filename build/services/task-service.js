@@ -5,6 +5,7 @@
 import fs from 'fs-extra';
 import { getTaskDirectory, getApiConversationFilePath, getUiMessagesFilePath, formatFileSize } from '../utils/paths.js';
 import { countJsonArrayItems } from '../utils/json-streaming.js';
+import { countJsonArrayItemsDirect } from '../utils/json-fallback.js';
 // Import from the index file to avoid circular dependencies
 import { getConversationHistory } from './index.js';
 /**
@@ -156,7 +157,17 @@ export async function getTaskSummary(tasksDir, taskId) {
         }
         // Count the total messages
         const apiFilePath = getApiConversationFilePath(tasksDir, taskId);
-        const totalMessages = await countJsonArrayItems(apiFilePath);
+        let totalMessages;
+        try {
+            // Try streaming count first
+            totalMessages = await countJsonArrayItems(apiFilePath);
+        }
+        catch (error) {
+            const streamError = error;
+            console.warn(`Streaming count failed, falling back to direct count: ${streamError.message}`);
+            // Fallback to direct count
+            totalMessages = await countJsonArrayItemsDirect(apiFilePath);
+        }
         summary.totalMessages = totalMessages;
         // Count message types by scanning the file
         // We'll implement this using our conversation service to filter by role
