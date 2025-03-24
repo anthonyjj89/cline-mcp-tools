@@ -14,7 +14,7 @@ import {
     getTimeDifference, 
     getHumanReadableTime,
     getTimeWithTimeZone
-} from '../../src/utils/time-utils.js';
+} from '../../build/utils/time-utils.js';
 
 function main() {
     console.log('Time Utilities Example');

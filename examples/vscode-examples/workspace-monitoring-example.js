@@ -14,7 +14,7 @@ import {
     getWorkspaceSettings,
     getRecentlyModifiedFiles,
     getWorkspaceGitInfo
-} from '../../src/utils/vscode-tracker.js';
+} from '../../build/utils/vscode-tracker.js';
 
 async function main() {
     console.log('VS Code Workspace Monitoring Example');

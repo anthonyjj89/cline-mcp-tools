@@ -8,7 +8,7 @@
  * 3. Display the results in a user-friendly format
  */
 
-import { getUnpushedCommits } from '../../src/utils/git-analyzer.js';
+import { getUnpushedCommits } from '../../build/utils/git-analyzer.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
