@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed import paths in example files
 - Updated time-formatting-example.js to use correct function names
 - Fixed "Parser is not a constructor" error in json-streaming.ts by updating import syntax
+- Fixed MCP server disconnection issue by properly importing CommonJS modules in json-streaming.ts
 
 ## [0.2.0] - 2025-03-24
 
