@@ -10,10 +10,10 @@
  */
 
 import { 
-    formatTimestamp, 
+    formatTimestamps, 
     getTimeDifference, 
-    getHumanReadableTime,
-    getTimeWithTimeZone
+    formatHumanReadable,
+    getCurrentTime
 } from '../../build/utils/time-utils.js';
 
 function main() {
@@ -28,11 +28,12 @@ function main() {
     console.log('\n1. Formatting Timestamps:');
     console.log('-------------------------');
     
-    console.log('ISO format:', formatTimestamp(now, 'iso'));
-    console.log('Short format:', formatTimestamp(now, 'short'));
-    console.log('Long format:', formatTimestamp(now, 'long'));
-    console.log('Date only:', formatTimestamp(now, 'date'));
-    console.log('Time only:', formatTimestamp(now, 'time'));
+    const formats = formatTimestamps(now);
+    console.log('UTC format:', formats.utc);
+    console.log('Local format:', formats.local);
+    console.log('Local time:', formats.localTime);
+    console.log('Local date:', formats.localDate);
+    console.log('Time zone:', formats.timeZoneName);
     
     // 2. Calculate time differences
     console.log('\n2. Time Differences:');
@@ -40,7 +41,7 @@ function main() {
     
     // Create a timestamp from 2 hours ago
     const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
-    console.log('Two hours ago:', formatTimestamp(twoHoursAgo, 'long'));
+    console.log('Two hours ago:', formatTimestamps(twoHoursAgo).local);
     
     // Calculate the difference
     const diff = getTimeDifference(twoHoursAgo, now);
@@ -48,7 +49,7 @@ function main() {
     
     // Create a timestamp from 3 days ago
     const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
-    console.log('Three days ago:', formatTimestamp(threeDaysAgo, 'long'));
+    console.log('Three days ago:', formatTimestamps(threeDaysAgo).local);
     
     // Calculate the difference
     const diffDays = getTimeDifference(threeDaysAgo, now);
@@ -58,19 +59,18 @@ function main() {
     console.log('\n3. Human-Readable Time:');
     console.log('----------------------');
     
-    console.log('Now:', getHumanReadableTime(now));
-    console.log('Two hours ago:', getHumanReadableTime(twoHoursAgo));
-    console.log('Three days ago:', getHumanReadableTime(threeDaysAgo));
+    console.log('Now:', formatHumanReadable(now));
+    console.log('Two hours ago:', formatHumanReadable(twoHoursAgo));
+    console.log('Three days ago:', formatHumanReadable(threeDaysAgo));
     
-    // 4. Time zones
-    console.log('\n4. Time Zones:');
-    console.log('-------------');
+    // 4. Current time
+    console.log('\n4. Current Time:');
+    console.log('---------------');
     
-    console.log('UTC:', getTimeWithTimeZone(now, 'UTC'));
-    console.log('New York:', getTimeWithTimeZone(now, 'America/New_York'));
-    console.log('London:', getTimeWithTimeZone(now, 'Europe/London'));
-    console.log('Tokyo:', getTimeWithTimeZone(now, 'Asia/Tokyo'));
-    console.log('Sydney:', getTimeWithTimeZone(now, 'Australia/Sydney'));
+    const currentTime = getCurrentTime();
+    console.log('Current UTC time:', currentTime.utc);
+    console.log('Current local time:', currentTime.local);
+    console.log('Current time zone:', currentTime.timeZoneName);
 }
 
 main();
