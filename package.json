@@ -7,9 +7,19 @@
     "cline-chat-reader": "./build/index.js"
   },
   "scripts": {
-    "build": "tsc && node copy-js-files.js",
+    "build": "tsc && node scripts/dev/copy-js-files.js",
     "watch": "tsc -w",
-    "start": "node build/index.js"
+    "start": "node build/index.js",
+    "test": "node tests/unit/git/test-git-analyzer.js",
+    "test:all": "for f in tests/unit/**/*.js; do node $f; done",
+    "cleanup": "bash scripts/dev/cleanup-home-directory.sh",
+    "migrate": "bash scripts/dev/migrate-claude-dev-mcp.sh",
+    "backup-and-delete": "bash scripts/dev/backup-and-delete-claude-dev-mcp.sh",
+    "reorganize": "bash scripts/dev/complete-reorganization.sh",
+    "example:git": "node examples/git-examples/unpushed-commits-example.js",
+    "example:time": "node examples/time-examples/time-formatting-example.js",
+    "example:vscode": "node examples/vscode-examples/workspace-monitoring-example.js",
+    "examples": "npm run example:git && npm run example:time && npm run example:vscode"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",
