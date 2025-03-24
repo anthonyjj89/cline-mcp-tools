@@ -5,6 +5,23 @@ All notable changes to the Cline Chat Reader MCP Server will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-03-24
+
+### Added
+- Robust fallback JSON parsing system for improved reliability
+- Direct file reading methods as alternatives to streaming
+- Comprehensive error handling with graceful degradation
+
+### Changed
+- Improved module imports using Node.js createRequire for better compatibility
+- Enhanced error logging for easier debugging
+- Updated restart script to include fallback solution information
+
+### Fixed
+- Resolved remaining JSON parsing issues in conversation analysis tools
+- Implemented fallback mechanisms for all JSON operations
+- Added graceful error handling for streaming failures
+
 ## [0.3.0] - 2025-03-24
 
 ### Added
