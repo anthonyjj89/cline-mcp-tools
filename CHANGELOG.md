@@ -25,9 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed import paths in Git test files
 - Fixed import paths in example files
 - Updated time-formatting-example.js to use correct function names
-
-### Known Issues
-- Conversation analysis tools have a parser error that needs to be fixed
+- Fixed "Parser is not a constructor" error in json-streaming.ts by updating import syntax
 
 ## [0.2.0] - 2025-03-24
 
