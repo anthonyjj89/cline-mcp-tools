@@ -4,8 +4,10 @@
  */
 
 import fs from 'fs';
-import { Parser } from 'stream-json/Parser.js';
-import { StreamArray } from 'stream-json/streamers/StreamArray.js';
+import pkg from 'stream-json/Parser.js';
+const { Parser } = pkg;
+import streamPkg from 'stream-json/streamers/StreamArray.js';
+const { StreamArray } = streamPkg;
 import { chain } from 'stream-chain';
 
 /**
