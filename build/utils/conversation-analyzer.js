@@ -4,10 +4,10 @@
  */
 import fs from 'fs';
 import { chain } from 'stream-chain';
-import pkg from 'stream-json/Parser.js';
-const { Parser } = pkg;
-import streamPkg from 'stream-json/streamers/StreamArray.js';
-const { StreamArray } = streamPkg;
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const { Parser } = require('stream-json/Parser');
+const { StreamArray } = require('stream-json/streamers/StreamArray');
 // Common English stop words to filter out
 const stopWords = [
     'a', 'an', 'the', 'and', 'or', 'but', 'is', 'are', 'was', 'were', 'be', 'been', 'being',

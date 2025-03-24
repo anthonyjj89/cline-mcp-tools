@@ -3,11 +3,11 @@
  * Provides memory-efficient processing of large JSON files
  */
 import fs from 'fs';
-import pkg from 'stream-json/Parser.js';
-const { Parser } = pkg;
-import streamPkg from 'stream-json/streamers/StreamArray.js';
-const { StreamArray } = streamPkg;
+import { createRequire } from 'module';
 import { chain } from 'stream-chain';
+const require = createRequire(import.meta.url);
+const { Parser } = require('stream-json/Parser');
+const { StreamArray } = require('stream-json/streamers/StreamArray');
 /**
  * Stream and filter a JSON array file, processing one item at a time
  * @param filePath Path to the JSON file containing an array
