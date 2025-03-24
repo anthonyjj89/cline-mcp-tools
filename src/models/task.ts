@@ -16,6 +16,7 @@ export interface TaskMetadata {
   uiFileSize: string;         // Human-readable UI file size
   apiFileSizeBytes: number;   // API file size in bytes
   uiFileSizeBytes: number;    // UI file size in bytes
+  extensionType: string;      // Type of extension: 'Cline Ultra' or 'Cline Regular'
 }
 
 /**

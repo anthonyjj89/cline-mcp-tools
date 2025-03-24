@@ -104,6 +104,10 @@ export async function getTask(tasksDir: string, taskId: string): Promise<TaskMet
       uiFileSize = uiStats.size;
     }
     
+    // Determine extension type based on the tasks directory path
+    const isUltra = tasksDir.includes('custom.claude-dev-ultra');
+    const extensionType = isUltra ? 'Cline Ultra' : 'Cline Regular';
+    
     // Return task metadata
     return {
       id: taskId,
@@ -115,7 +119,8 @@ export async function getTask(tasksDir: string, taskId: string): Promise<TaskMet
       apiFileSize: formatFileSize(apiFileSize),
       uiFileSize: formatFileSize(uiFileSize),
       apiFileSizeBytes: apiFileSize,
-      uiFileSizeBytes: uiFileSize
+      uiFileSizeBytes: uiFileSize,
+      extensionType
     };
   } catch (error) {
     console.error(`Error getting task ${taskId}:`, error);

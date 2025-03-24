@@ -11,28 +11,34 @@ This directory contains documentation for the Cline Chat Reader MCP server.
 
 ## Feature Documentation
 
+### Extension Features
+
+- `features/extension-type-identification.md`: Documentation for the extension type identification feature
+- `features/external-advice.md`: Documentation for the external advice feature
+
 ### Git Analysis
 
-- `git-analyzer.md`: Documentation for the Git analyzer functionality
-- `git-diff.md`: Documentation for the Git diff functionality
-- `uncommitted-changes.md`: Documentation for detecting uncommitted changes
-- `unpushed-commits.md`: Documentation for detecting unpushed commits
+- `features/git-analyzer.md`: Documentation for the Git analyzer functionality
+- `features/git-diff.md`: Documentation for the Git diff functionality
+- `features/uncommitted-changes.md`: Documentation for detecting uncommitted changes
+- `features/unpushed-commits.md`: Documentation for detecting unpushed commits
 
 ### VS Code Monitoring
 
-- `vscode-monitoring.md`: Documentation for VS Code monitoring functionality
+- `features/vscode-monitoring.md`: Documentation for VS Code monitoring functionality
 
 ### Conversation Analysis
 
-- `conversation-analyzer.md`: Documentation for conversation analysis
+- `features/conversation-analyzer.md`: Documentation for conversation analysis
 
 ### Time Utilities
 
-- `time-utilities.md`: Documentation for time utilities
+- `features/time-utilities.md`: Documentation for time utilities
 
 ### Other
 
-- `fixes.md`: Documentation for fixes and improvements
+- `features/fixes.md`: Documentation for fixes and improvements
+- `roadmap.md`: Future development plans and improvements
 
 ## Installation and Setup
 

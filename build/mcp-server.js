@@ -7,6 +7,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError, } from '@modelcontextprotocol/sdk/types.js';
 import fs from 'fs-extra';
 import path from 'path';
+import os from 'os';
 // Import VS Code monitoring tools
 import { GetVSCodeWorkspacesSchema, AnalyzeWorkspaceSchema, GetFileHistorySchema, AnalyzeCloneActivitySchema } from './vscode-monitoring.js';
 import { getVSCodeWorkspaces, getRecentlyModifiedFiles } from './utils/vscode-tracker.js';
@@ -14,7 +15,7 @@ import { getRecentChanges, getFileHistory, findGitRepository, getGitDiff, getUnp
 import { getWorkspaceSettings, getWorkspaceInfo, getLaunchConfigurations, getRecommendedExtensions } from './utils/vscode-settings.js';
 import { formatTimestamps, getCurrentTime } from './utils/time-utils.js';
 import { z } from 'zod';
-import { getVSCodeTasksDirectory, getApiConversationFilePath } from './utils/paths.js';
+import { getVSCodeTasksDirectory, getApiConversationFilePath, getTasksDirectoryForTask } from './utils/paths.js';
 import { listTasks, getTask, getTaskSummary, getConversationHistory, searchConversations, findCodeDiscussions } from './services/index.js';
 import { analyzeConversation } from './utils/conversation-analyzer-simple.js';
 // Schema definitions for MCP tools
@@ -81,6 +82,15 @@ const GetUnpushedCommitsSchema = z.object({
 });
 const GetUncommittedChangesSchema = z.object({
     repoPath: z.string().describe('Path to the Git repository')
+});
+const SendExternalAdviceSchema = z.object({
+    content: z.string().describe('Advice content to send to the user'),
+    title: z.string().optional().describe('Title for the advice notification'),
+    type: z.enum(['info', 'warning', 'tip', 'task']).default('info').describe('Type of advice'),
+    priority: z.enum(['low', 'medium', 'high']).default('medium').describe('Priority level of the advice'),
+    expiresAfter: z.number().optional().describe('Time in minutes after which the advice should expire'),
+    relatedFiles: z.array(z.string()).optional().describe('Paths to files related to this advice'),
+    task_id: z.string().describe('Task ID (timestamp) of the conversation to send advice to')
 });
 /**
  * Initialize the MCP server
@@ -353,6 +363,51 @@ export async function initMcpServer(tasksDir) {
                         },
                         required: ['repoPath']
                     }
+                },
+                {
+                    name: 'send_external_advice',
+                    description: 'Send a recommendation or advice directly to the VS Code extension as a notification (NOTE: This feature only works with Cline Ultra, not with the standard Cline extension)',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            content: {
+                                type: 'string',
+                                description: 'Advice content to send to the user'
+                            },
+                            title: {
+                                type: 'string',
+                                description: 'Title for the advice notification'
+                            },
+                            type: {
+                                type: 'string',
+                                enum: ['info', 'warning', 'tip', 'task'],
+                                default: 'info',
+                                description: 'Type of advice'
+                            },
+                            priority: {
+                                type: 'string',
+                                enum: ['low', 'medium', 'high'],
+                                default: 'medium',
+                                description: 'Priority level of the advice'
+                            },
+                            expiresAfter: {
+                                type: 'number',
+                                description: 'Time in minutes after which the advice should expire'
+                            },
+                            relatedFiles: {
+                                type: 'array',
+                                items: {
+                                    type: 'string'
+                                },
+                                description: 'Paths to files related to this advice'
+                            },
+                            task_id: {
+                                type: 'string',
+                                description: 'Task ID (timestamp) of the conversation to send advice to'
+                            }
+                        },
+                        required: ['content', 'task_id']
+                    }
                 }
             ]
         };
@@ -394,6 +449,8 @@ export async function initMcpServer(tasksDir) {
                     return await handleGetUnpushedCommits(args);
                 case 'get_uncommitted_changes':
                     return await handleGetUncommittedChanges(args);
+                case 'send_external_advice':
+                    return await handleSendExternalAdvice(tasksDir, args);
                 default:
                     throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
             }
@@ -428,8 +485,10 @@ export async function initMcpServer(tasksDir) {
  */
 async function handleGetLastNMessages(tasksDir, args) {
     const { task_id, limit } = GetLastNMessagesSchema.parse(args);
+    // Get the appropriate tasks directory for this specific task
+    const specificTasksDir = await getTasksDirectoryForTask(task_id);
     // Get conversation messages
-    const messages = await getConversationHistory(tasksDir, task_id, { limit });
+    const messages = await getConversationHistory(specificTasksDir, task_id, { limit });
     return {
         content: [
             {
@@ -448,8 +507,10 @@ async function handleGetLastNMessages(tasksDir, args) {
  */
 async function handleGetMessagesSince(tasksDir, args) {
     const { task_id, since, limit } = GetMessagesSinceSchema.parse(args);
+    // Get the appropriate tasks directory for this specific task
+    const specificTasksDir = await getTasksDirectoryForTask(task_id);
     // Get messages since timestamp
-    const messages = await getConversationHistory(tasksDir, task_id, { since, limit });
+    const messages = await getConversationHistory(specificTasksDir, task_id, { since, limit });
     return {
         content: [
             {
@@ -469,8 +530,10 @@ async function handleGetMessagesSince(tasksDir, args) {
  */
 async function handleGetConversationSummary(tasksDir, args) {
     const { task_id } = GetConversationSummarySchema.parse(args);
+    // Get the appropriate tasks directory for this specific task
+    const specificTasksDir = await getTasksDirectoryForTask(task_id);
     // Get conversation summary
-    const summary = await getTaskSummary(tasksDir, task_id);
+    const summary = await getTaskSummary(specificTasksDir, task_id);
     return {
         content: [
             {
@@ -485,8 +548,10 @@ async function handleGetConversationSummary(tasksDir, args) {
  */
 async function handleFindCodeDiscussions(tasksDir, args) {
     const { task_id, filename } = FindCodeDiscussionsSchema.parse(args);
+    // Get the appropriate tasks directory for this specific task
+    const specificTasksDir = await getTasksDirectoryForTask(task_id);
     // Find code discussions
-    const discussions = await findCodeDiscussions(tasksDir, task_id, filename || null);
+    const discussions = await findCodeDiscussions(specificTasksDir, task_id, filename || null);
     return {
         content: [
             {
@@ -506,11 +571,23 @@ async function handleFindCodeDiscussions(tasksDir, args) {
  */
 async function handleListRecentTasks(tasksDir, args) {
     const { limit } = ListRecentTasksSchema.parse(args);
-    // List tasks
-    const allTasks = await listTasks(tasksDir);
+    // Get both Cline Ultra and standard Cline paths
+    const homedir = os.homedir();
+    const ultraPath = path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'tasks');
+    const standardPath = path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'tasks');
+    // List tasks from both directories
+    const ultraTasks = await fs.pathExists(ultraPath) ? await listTasks(ultraPath) : [];
+    const standardTasks = await fs.pathExists(standardPath) ? await listTasks(standardPath) : [];
+    // Merge and sort tasks by timestamp
+    const allTasks = [...ultraTasks, ...standardTasks].sort((a, b) => b.timestamp - a.timestamp);
+    // Limit the number of tasks
     const limitedTasks = allTasks.slice(0, limit);
     // Get details for each task
-    const taskDetails = await Promise.all(limitedTasks.map(async (task) => await getTask(tasksDir, task.id)));
+    const taskDetails = await Promise.all(limitedTasks.map(async (task) => {
+        // Get the appropriate tasks directory for this specific task
+        const specificTasksDir = await getTasksDirectoryForTask(task.id);
+        return await getTask(specificTasksDir, task.id);
+    }));
     return {
         content: [
             {
@@ -528,10 +605,12 @@ async function handleListRecentTasks(tasksDir, args) {
  */
 async function handleGetTaskById(tasksDir, args) {
     const { task_id } = GetTaskByIdSchema.parse(args);
+    // Get the appropriate tasks directory for this specific task
+    const specificTasksDir = await getTasksDirectoryForTask(task_id);
     // Get task details
-    const task = await getTask(tasksDir, task_id);
+    const task = await getTask(specificTasksDir, task_id);
     // Get a preview of the conversation
-    const previewMessages = await getConversationHistory(tasksDir, task_id, { limit: 5 });
+    const previewMessages = await getConversationHistory(specificTasksDir, task_id, { limit: 5 });
     return {
         content: [
             {
@@ -549,19 +628,38 @@ async function handleGetTaskById(tasksDir, args) {
  */
 async function handleSearchConversations(tasksDir, args) {
     const { search_term, limit, max_tasks_to_search } = SearchConversationsSchema.parse(args);
-    // Search conversations
-    const results = await searchConversations(tasksDir, search_term, {
-        limit,
-        maxTasksToSearch: max_tasks_to_search
-    });
+    // Get both Cline Ultra and standard Cline paths
+    const homedir = os.homedir();
+    const ultraPath = path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'tasks');
+    const standardPath = path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'tasks');
+    // Search in both directories
+    const ultraResults = await fs.pathExists(ultraPath) ?
+        await searchConversations(ultraPath, search_term, {
+            limit: limit * 2, // Double the limit since we'll merge and limit later
+            maxTasksToSearch: Math.ceil(max_tasks_to_search / 2) // Split the max tasks between both directories
+        }) : [];
+    const standardResults = await fs.pathExists(standardPath) ?
+        await searchConversations(standardPath, search_term, {
+            limit: limit * 2, // Double the limit since we'll merge and limit later
+            maxTasksToSearch: Math.ceil(max_tasks_to_search / 2) // Split the max tasks between both directories
+        }) : [];
+    // Merge results and sort by timestamp (most recent first)
+    const allResults = [...ultraResults, ...standardResults]
+        .sort((a, b) => {
+        // Sort by timestamp if available, otherwise keep original order
+        const timestampA = a.message?.timestamp || 0;
+        const timestampB = b.message?.timestamp || 0;
+        return timestampB - timestampA;
+    })
+        .slice(0, limit); // Apply the final limit
     return {
         content: [
             {
                 type: 'text',
                 text: JSON.stringify({
                     search_term,
-                    result_count: results.length,
-                    results
+                    result_count: allResults.length,
+                    results: allResults
                 }, null, 2),
             },
         ],
@@ -736,8 +834,10 @@ async function handleAnalyzeCloneActivity(args) {
  */
 async function handleAnalyzeConversation(tasksDir, args) {
     const { task_id, minutes_back } = AnalyzeConversationSchema.parse(args);
+    // Get the appropriate tasks directory for this specific task
+    const specificTasksDir = await getTasksDirectoryForTask(task_id);
     // Get the API conversation file path
-    const apiFilePath = getApiConversationFilePath(tasksDir, task_id);
+    const apiFilePath = getApiConversationFilePath(specificTasksDir, task_id);
     // Calculate timestamp for filtering if minutes_back is provided
     const since = minutes_back ? Date.now() - (minutes_back * 60 * 1000) : 0;
     // Analyze the conversation
@@ -835,19 +935,70 @@ async function handleGetUncommittedChanges(args) {
     };
 }
 /**
+ * Handle send_external_advice tool call
+ */
+async function handleSendExternalAdvice(tasksDir, args) {
+    const { content, title, type, priority, expiresAfter, relatedFiles, task_id } = SendExternalAdviceSchema.parse(args);
+    // Get the appropriate tasks directory for this specific task
+    const specificTasksDir = await getTasksDirectoryForTask(task_id);
+    // Check if we're using the Ultra path
+    const isUltra = specificTasksDir.includes('custom.claude-dev-ultra');
+    // Get the task directory
+    const taskDir = path.join(specificTasksDir, task_id);
+    // Verify the task directory exists
+    if (!fs.existsSync(taskDir)) {
+        throw new McpError(ErrorCode.InvalidParams, `Task directory does not exist: ${taskDir}`);
+    }
+    // Create external advice object
+    const advice = {
+        id: `advice-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        content,
+        title: title || 'Advice from Claude',
+        type,
+        priority,
+        timestamp: Date.now(),
+        expiresAt: expiresAfter ? Date.now() + (expiresAfter * 60 * 1000) : null,
+        relatedFiles: relatedFiles || [],
+        read: false
+    };
+    // Create external advice directory within the specific task folder
+    const adviceDir = path.join(taskDir, 'external-advice');
+    await fs.mkdirp(adviceDir);
+    // Write advice to file
+    const adviceFilePath = path.join(adviceDir, `${advice.id}.json`);
+    await fs.writeFile(adviceFilePath, JSON.stringify(advice, null, 2), 'utf8');
+    return {
+        content: [
+            {
+                type: 'text',
+                text: JSON.stringify({
+                    success: true,
+                    adviceId: advice.id,
+                    message: 'Advice sent successfully',
+                    warning: isUltra ? null : 'NOTE: This advice was sent to standard Cline, but the External Advice feature only works with Cline Ultra.'
+                }, null, 2),
+            },
+        ],
+    };
+}
+/**
  * Start the MCP server
  */
 export async function startMcpServer() {
     try {
-        // Get the VS Code tasks directory based on the current OS
-        const tasksDir = getVSCodeTasksDirectory();
+        // Get the VS Code tasks directories based on the current OS
+        // Note: We don't pass a task_id here since we're just starting up
+        const tasksDirs = getVSCodeTasksDirectory();
+        // Use the first available tasks directory
+        const tasksDir = tasksDirs[0];
         // Initialize MCP server
         const server = await initMcpServer(tasksDir);
         // Connect to transport
         const transport = new StdioServerTransport();
         await server.connect(transport);
         console.error('Claude Task Reader MCP server running on stdio');
-        console.error(`Using VS Code tasks directory: ${tasksDir}`);
+        console.error(`Using VS Code tasks directories: ${tasksDirs.join(', ')}`);
+        console.error('Supporting both Cline and Cline Ultra extensions');
         // Handle process termination
         process.on('SIGINT', async () => {
             console.log('Shutting down server...');

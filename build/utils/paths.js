@@ -6,21 +6,74 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs-extra';
 /**
- * Get the platform-specific path to the VS Code extension tasks directory
- * @returns The absolute path to the VS Code extension tasks directory
+ * Get the platform-specific paths to the VS Code extension tasks directories
+ * @param taskId Optional task ID to check for existence in either path
+ * @returns Array of absolute paths to the VS Code extension tasks directories
  */
-export function getVSCodeTasksDirectory() {
+export function getVSCodeTasksDirectory(taskId) {
     const homedir = os.homedir();
-    switch (process.platform) {
-        case 'win32':
-            return path.join(process.env.APPDATA || '', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'tasks');
-        case 'darwin':
-            return path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'tasks');
-        case 'linux':
-            return path.join(homedir, '.config', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'tasks');
-        default:
-            throw new Error(`Unsupported platform: ${process.platform}`);
+    // Define paths for both extensions based on platform
+    const getPaths = () => {
+        switch (process.platform) {
+            case 'win32':
+                return [
+                    // Cline Ultra path
+                    path.join(process.env.APPDATA || '', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'tasks'),
+                    // Standard Cline path
+                    path.join(process.env.APPDATA || '', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'tasks')
+                ];
+            case 'darwin':
+                return [
+                    // Cline Ultra path
+                    path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'tasks'),
+                    // Standard Cline path
+                    path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'tasks')
+                ];
+            case 'linux':
+                return [
+                    // Cline Ultra path
+                    path.join(homedir, '.config', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'tasks'),
+                    // Standard Cline path
+                    path.join(homedir, '.config', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'tasks')
+                ];
+            default:
+                throw new Error(`Unsupported platform: ${process.platform}`);
+        }
+    };
+    const possiblePaths = getPaths();
+    // Always return all paths that exist
+    const existingPaths = possiblePaths.filter(p => fs.existsSync(p));
+    // If no paths exist, return all possible paths (for creation purposes)
+    return existingPaths.length > 0 ? existingPaths : possiblePaths;
+}
+/**
+ * Find a task across all possible paths
+ * @param taskId Task ID to find
+ * @returns Object containing the task directory and base path, or null if not found
+ */
+export async function findTaskAcrossPaths(taskId) {
+    const allPaths = getVSCodeTasksDirectory();
+    for (const basePath of allPaths) {
+        const taskDir = path.join(basePath, taskId);
+        if (await fs.pathExists(taskDir)) {
+            return { taskDir, basePath };
+        }
     }
+    return null; // Task not found in any path
+}
+/**
+ * Get the appropriate tasks directory for a specific task
+ * @param taskId Task ID to find
+ * @returns The base path where the task exists, or the first existing path if not found
+ */
+export async function getTasksDirectoryForTask(taskId) {
+    const taskLocation = await findTaskAcrossPaths(taskId);
+    if (taskLocation) {
+        return taskLocation.basePath;
+    }
+    // If task not found, return the first existing path
+    const allPaths = getVSCodeTasksDirectory();
+    return allPaths[0];
 }
 /**
  * Get the absolute path to a task directory

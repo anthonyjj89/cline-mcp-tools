@@ -5,17 +5,41 @@ All notable changes to the Cline Chat Reader MCP Server will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2025-03-25
+
+### Added
+- Extension type identification in task metadata
+- Explicit `extensionType` field in TaskMetadata interface
+- Enhanced task identification for both Cline Ultra and Cline Regular extensions
+- Comprehensive testing for extension type identification
+- Test script for verifying extension type in task metadata
+
+### Changed
+- Modified `getTask` function to include extension type information
+- Updated task metadata to clearly indicate which extension a task belongs to
+- Improved task directory resolution across multiple extension paths
+
+### Fixed
+- Fixed issue where Claude Desktop was misidentifying tasks based on content analysis
+- Ensured consistent extension type identification across all MCP tools
+
 ## [0.4.0] - 2025-03-24
 
 ### Added
+- External Advice feature for sending recommendations directly to VS Code
 - Robust fallback JSON parsing system for improved reliability
 - Direct file reading methods as alternatives to streaming
 - Comprehensive error handling with graceful degradation
+- Support for both Cline and Cline Ultra VS Code extensions
+- Warning system for features that only work with specific extensions
 
 ### Changed
 - Improved module imports using Node.js createRequire for better compatibility
 - Enhanced error logging for easier debugging
 - Updated restart script to include fallback solution information
+- Simplified External Advice feature user flow to insert notification content directly into chat as user messages
+- Updated documentation and examples to reflect the simplified External Advice workflow
+- Modified `getVSCodeTasksDirectory` to support multiple extension paths
 
 ### Fixed
 - Resolved remaining JSON parsing issues in conversation analysis tools
