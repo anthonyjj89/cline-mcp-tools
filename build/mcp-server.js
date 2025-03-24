@@ -4,19 +4,18 @@
  */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError, } from '@modelcontextprotocol/sdk/types.js';
+import fs from 'fs-extra';
+import path from 'path';
+// Import VS Code monitoring tools
+import { GetVSCodeWorkspacesSchema, AnalyzeWorkspaceSchema, GetFileHistorySchema, AnalyzeCloneActivitySchema } from './vscode-monitoring.js';
+import { getVSCodeWorkspaces, getRecentlyModifiedFiles } from './utils/vscode-tracker.js';
+import { getRecentChanges, getFileHistory, findGitRepository, getGitDiff } from './utils/git-analyzer.js';
+import { getWorkspaceSettings, getWorkspaceInfo, getLaunchConfigurations, getRecommendedExtensions } from './utils/vscode-settings.js';
 import { z } from 'zod';
-import { getVSCodeTasksDirectory } from './utils/paths.js';
+import { getVSCodeTasksDirectory, getApiConversationFilePath } from './utils/paths.js';
 import { listTasks, getTask, getTaskSummary, getConversationHistory, searchConversations, findCodeDiscussions } from './services/index.js';
-import { createRequire } from 'module';
-
-// Create a require function
-const require = createRequire(import.meta.url);
-
-// Use require to import CommonJS modules
-const zodToJsonSchemaModule = require('zod-to-json-schema');
-const zodToJsonSchema = zodToJsonSchemaModule.default || zodToJsonSchemaModule;
-
+import { analyzeConversation } from './utils/conversation-analyzer-simple.js';
 // Schema definitions for MCP tools
 const GetLastNMessagesSchema = z.object({
     task_id: z.string().describe('Task ID (timestamp) of the conversation'),
@@ -26,7 +25,6 @@ const GetLastNMessagesSchema = z.object({
         .default(50)
         .transform(val => Math.min(val, 100))
 });
-
 const GetMessagesSinceSchema = z.object({
     task_id: z.string().describe('Task ID (timestamp) of the conversation'),
     since: z.number().describe('Timestamp to retrieve messages from'),
@@ -36,16 +34,13 @@ const GetMessagesSinceSchema = z.object({
         .default(50)
         .transform(val => Math.min(val, 100))
 });
-
 const GetConversationSummarySchema = z.object({
     task_id: z.string().describe('Task ID (timestamp) of the conversation')
 });
-
 const FindCodeDiscussionsSchema = z.object({
     task_id: z.string().describe('Task ID (timestamp) of the conversation'),
     filename: z.string().optional().describe('Filename to filter discussions by (optional)')
 });
-
 const ListRecentTasksSchema = z.object({
     limit: z.number()
         .optional()
@@ -53,11 +48,9 @@ const ListRecentTasksSchema = z.object({
         .default(10)
         .transform(val => Math.min(val, 50))
 });
-
 const GetTaskByIdSchema = z.object({
     task_id: z.string().describe('Task ID (timestamp) of the conversation')
 });
-
 const SearchConversationsSchema = z.object({
     search_term: z.string().describe('Term to search for'),
     limit: z.number()
@@ -71,495 +64,715 @@ const SearchConversationsSchema = z.object({
         .default(10)
         .transform(val => Math.min(val, 20))
 });
-
-// New schema for context search
-const SearchByContextSchema = z.object({
-    context_term: z.string().describe('The project or topic to search for'),
-    time_range: z.object({
-        start: z.number().optional().describe('Start timestamp for filtering messages'),
-        end: z.number().optional().describe('End timestamp for filtering messages')
-    }).optional().describe('Optional time range filter'),
-    context_lines: z.number()
+const AnalyzeConversationSchema = z.object({
+    task_id: z.string().describe('Task ID (timestamp) of the conversation'),
+    minutes_back: z.number()
         .optional()
-        .describe('How many messages before/after to include')
-        .default(3)
-        .transform(val => Math.min(val, 10)),
-    max_results: z.number()
-        .optional()
-        .describe('Maximum number of results to return')
-        .default(20)
-        .transform(val => Math.min(val, 50))
+        .describe('Only analyze messages from the last X minutes (optional)')
 });
-
-// Convert Zod schema to JSON Schema
-function convertZodToJsonSchema(zodSchema) {
-    try {
-        return zodToJsonSchema(zodSchema, {
-            $refStrategy: 'none',
-            definitionPath: 'definitions'
-        });
-    } catch (error) {
-        console.error('Error converting Zod schema to JSON Schema:', error);
-        // Return a simple schema as fallback
-        return {
-            type: 'object',
-            properties: {},
-            required: []
-        };
-    }
-}
-
+const GetGitDiffSchema = z.object({
+    filePath: z.string().describe('Path to the file to get diff for'),
+    oldRef: z.string().optional().describe('Old Git reference (commit hash, branch, etc.)'),
+    newRef: z.string().optional().describe('New Git reference (commit hash, branch, etc.)')
+});
 /**
- * Start the MCP server
+ * Initialize the MCP server
  */
-export async function startMcpServer() {
-    // Create the server instance
-    const server = new Server(
-        {
-            name: 'claude-task-reader',
-            version: '0.1.0'
-        },
-        {
-            capabilities: {
-                tools: {}
+export async function initMcpServer(tasksDir) {
+    // Create server instance
+    const server = new Server({
+        name: 'claude-task-reader',
+        version: '0.1.0',
+    }, {
+        capabilities: {
+            tools: {
+                listChanged: false
             }
         }
-    );
-
-    // Get the VS Code tasks directory
-    const tasksDir = getVSCodeTasksDirectory();
-    console.error(`Using VS Code tasks directory: ${tasksDir}`);
-
-    // Set up request handlers for tools
+    });
+    // List MCP tools
     server.setRequestHandler(ListToolsRequestSchema, async () => {
-        // Convert all Zod schemas to JSON Schema
-        const getLastNMessagesJsonSchema = convertZodToJsonSchema(GetLastNMessagesSchema);
-        const getMessagesSinceJsonSchema = convertZodToJsonSchema(GetMessagesSinceSchema);
-        const getConversationSummaryJsonSchema = convertZodToJsonSchema(GetConversationSummarySchema);
-        const findCodeDiscussionsJsonSchema = convertZodToJsonSchema(FindCodeDiscussionsSchema);
-        const listRecentTasksJsonSchema = convertZodToJsonSchema(ListRecentTasksSchema);
-        const getTaskByIdJsonSchema = convertZodToJsonSchema(GetTaskByIdSchema);
-        const searchConversationsJsonSchema = convertZodToJsonSchema(SearchConversationsSchema);
-        const searchByContextJsonSchema = convertZodToJsonSchema(SearchByContextSchema);
-
         return {
             tools: [
+                // VS Code monitoring tools
+                {
+                    name: 'get_vscode_workspaces',
+                    description: 'Get a list of recently opened VS Code workspaces',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {},
+                        required: []
+                    }
+                },
+                {
+                    name: 'analyze_workspace',
+                    description: 'Analyze a specific VS Code workspace',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            workspacePath: {
+                                type: 'string',
+                                description: 'Path to the workspace to analyze'
+                            },
+                            hoursBack: {
+                                type: 'number',
+                                description: 'How many hours back to look for modified files (default: 24)',
+                                default: 24
+                            }
+                        },
+                        required: ['workspacePath']
+                    }
+                },
+                {
+                    name: 'get_file_history',
+                    description: 'Get Git history for a specific file',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            filePath: {
+                                type: 'string',
+                                description: 'Path to the file to get history for'
+                            }
+                        },
+                        required: ['filePath']
+                    }
+                },
+                {
+                    name: 'analyze_cline_activity',
+                    description: 'Analyze recent VS Code activity across all workspaces',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            hoursBack: {
+                                type: 'number',
+                                description: 'How many hours back to look for activity (default: 24)',
+                                default: 24
+                            }
+                        },
+                        required: []
+                    }
+                },
+                // Original tools
                 {
                     name: 'get_last_n_messages',
                     description: 'Retrieve the last N messages from a conversation',
-                    inputSchema: getLastNMessagesJsonSchema
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            task_id: {
+                                type: 'string',
+                                description: 'Task ID (timestamp) of the conversation'
+                            },
+                            limit: {
+                                type: 'number',
+                                description: 'Maximum number of messages to retrieve (default: 50, max: 100)',
+                                default: 50
+                            }
+                        },
+                        required: ['task_id']
+                    }
                 },
                 {
                     name: 'get_messages_since',
                     description: 'Retrieve messages after a specific timestamp',
-                    inputSchema: getMessagesSinceJsonSchema
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            task_id: {
+                                type: 'string',
+                                description: 'Task ID (timestamp) of the conversation'
+                            },
+                            since: {
+                                type: 'number',
+                                description: 'Timestamp to retrieve messages from'
+                            },
+                            limit: {
+                                type: 'number',
+                                description: 'Maximum number of messages to retrieve (default: 50, max: 100)',
+                                default: 50
+                            }
+                        },
+                        required: ['task_id', 'since']
+                    }
                 },
                 {
                     name: 'get_conversation_summary',
                     description: 'Generate a concise summary of the conversation',
-                    inputSchema: getConversationSummaryJsonSchema
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            task_id: {
+                                type: 'string',
+                                description: 'Task ID (timestamp) of the conversation'
+                            }
+                        },
+                        required: ['task_id']
+                    }
                 },
                 {
                     name: 'find_code_discussions',
                     description: 'Identify discussions about specific code files or snippets',
-                    inputSchema: findCodeDiscussionsJsonSchema
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            task_id: {
+                                type: 'string',
+                                description: 'Task ID (timestamp) of the conversation'
+                            },
+                            filename: {
+                                type: 'string',
+                                description: 'Filename to filter discussions by (optional)'
+                            }
+                        },
+                        required: ['task_id']
+                    }
                 },
                 {
                     name: 'list_recent_tasks',
                     description: 'List the most recent tasks/conversations',
-                    inputSchema: listRecentTasksJsonSchema
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            limit: {
+                                type: 'number',
+                                description: 'Maximum number of tasks to retrieve (default: 10, max: 50)',
+                                default: 10
+                            }
+                        }
+                    }
                 },
                 {
                     name: 'get_task_by_id',
                     description: 'Get a specific task by its ID',
-                    inputSchema: getTaskByIdJsonSchema
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            task_id: {
+                                type: 'string',
+                                description: 'Task ID (timestamp) of the conversation'
+                            }
+                        },
+                        required: ['task_id']
+                    }
                 },
                 {
                     name: 'search_conversations',
                     description: 'Search across conversations for specific terms or patterns',
-                    inputSchema: searchConversationsJsonSchema
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            search_term: {
+                                type: 'string',
+                                description: 'Term to search for'
+                            },
+                            limit: {
+                                type: 'number',
+                                description: 'Maximum number of results (default: 20, max: 50)',
+                                default: 20
+                            },
+                            max_tasks_to_search: {
+                                type: 'number',
+                                description: 'Maximum number of tasks to search (default: 10, max: 20)',
+                                default: 10
+                            }
+                        },
+                        required: ['search_term']
+                    }
                 },
                 {
-                    name: 'search_by_context',
-                    description: 'Search for conversations about specific topics with context',
-                    inputSchema: searchByContextJsonSchema
+                    name: 'analyze_conversation',
+                    description: 'Analyze a conversation to extract key information, topics, and patterns',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            task_id: {
+                                type: 'string',
+                                description: 'Task ID (timestamp) of the conversation'
+                            },
+                            minutes_back: {
+                                type: 'number',
+                                description: 'Only analyze messages from the last X minutes (optional)'
+                            }
+                        },
+                        required: ['task_id']
+                    }
+                },
+                {
+                    name: 'get_git_diff',
+                    description: 'Get Git diff for a specific file between references or working directory and HEAD',
+                    inputSchema: {
+                        type: 'object',
+                        properties: {
+                            filePath: {
+                                type: 'string',
+                                description: 'Path to the file to get diff for'
+                            },
+                            oldRef: {
+                                type: 'string',
+                                description: 'Old Git reference (commit hash, branch, etc.)'
+                            },
+                            newRef: {
+                                type: 'string',
+                                description: 'New Git reference (commit hash, branch, etc.)'
+                            }
+                        },
+                        required: ['filePath']
+                    }
                 }
             ]
         };
     });
-
+    // Handle tool calls
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
+        const { name, arguments: args } = request.params;
         try {
-            console.error(`Received tool call: ${request.params.name}`);
-            console.error(`Arguments: ${JSON.stringify(request.params.arguments)}`);
-            
-            switch (request.params.name) {
+            switch (name) {
+                // VS Code monitoring tools
+                case 'get_vscode_workspaces':
+                    return await handleGetVSCodeWorkspaces(args);
+                case 'analyze_workspace':
+                    return await handleAnalyzeWorkspace(args);
+                case 'get_file_history':
+                    return await handleGetFileHistory(args);
+                case 'analyze_cline_activity':
+                    return await handleAnalyzeCloneActivity(args);
+                // Original tools
                 case 'get_last_n_messages':
-                    return await handleGetLastNMessages(request.params.arguments, tasksDir);
+                    return await handleGetLastNMessages(tasksDir, args);
                 case 'get_messages_since':
-                    return await handleGetMessagesSince(request.params.arguments, tasksDir);
+                    return await handleGetMessagesSince(tasksDir, args);
                 case 'get_conversation_summary':
-                    return await handleGetConversationSummary(request.params.arguments, tasksDir);
+                    return await handleGetConversationSummary(tasksDir, args);
                 case 'find_code_discussions':
-                    return await handleFindCodeDiscussions(request.params.arguments, tasksDir);
+                    return await handleFindCodeDiscussions(tasksDir, args);
                 case 'list_recent_tasks':
-                    return await handleListRecentTasks(request.params.arguments, tasksDir);
+                    return await handleListRecentTasks(tasksDir, args);
                 case 'get_task_by_id':
-                    return await handleGetTaskById(request.params.arguments, tasksDir);
+                    return await handleGetTaskById(tasksDir, args);
                 case 'search_conversations':
-                    return await handleSearchConversations(request.params.arguments, tasksDir);
-                case 'search_by_context':
-                    return await handleSearchByContext(request.params.arguments, tasksDir);
+                    return await handleSearchConversations(tasksDir, args);
+                case 'analyze_conversation':
+                    return await handleAnalyzeConversation(tasksDir, args);
+                case 'get_git_diff':
+                    return await handleGetGitDiff(args);
                 default:
-                    throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${request.params.name}`);
+                    throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
             }
-        } catch (error) {
-            console.error(`Error executing tool ${request.params.name}:`, error);
+        }
+        catch (error) {
+            console.error(`Error executing tool ${name}:`, error);
+            // Return formatted error
+            if (error instanceof McpError) {
+                throw error;
+            }
+            if (error instanceof z.ZodError) {
+                throw new McpError(ErrorCode.InvalidParams, `Invalid arguments: ${error.errors
+                    .map((e) => `${e.path.join(".")}: ${e.message}`)
+                    .join(", ")}`);
+            }
             return {
                 content: [
                     {
                         type: 'text',
-                        text: `Error: ${error.message}`
-                    }
+                        text: `Error: ${error.message}`,
+                    },
                 ],
-                isError: true
+                isError: true,
             };
         }
     });
-
-    // Handle errors
-    server.onerror = (error) => {
-        console.error('MCP server error:', error);
-    };
-
-    // Connect to the transport
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    console.error('Claude Task Reader MCP server running on stdio');
-
+    // Return the server instance
     return server;
 }
-
 /**
- * Handle the get_last_n_messages tool
+ * Handle get_last_n_messages tool call
  */
-async function handleGetLastNMessages(args, tasksDir) {
-  try {
-    console.error(`Handling get_last_n_messages with args: ${JSON.stringify(args)}`);
+async function handleGetLastNMessages(tasksDir, args) {
     const { task_id, limit } = GetLastNMessagesSchema.parse(args);
-    
-    console.error(`Retrieving last ${limit} messages for task ${task_id}`);
-    let messages = await getConversationHistory(tasksDir, task_id, { limit: limit * 2 }); // Get more messages than needed to ensure we have enough after filtering
-    
-    console.error(`Retrieved ${messages.length} messages before processing`);
-    
-    // Check if messages have timestamp property
-    const hasTimestamp = messages.length > 0 && 'timestamp' in messages[0] && messages[0].timestamp;
-    
-    if (!hasTimestamp) {
-      console.error('Messages do not have timestamp property, adding index-based timestamps');
-      
-      // Add index-based timestamps to messages (higher index = newer message)
-      // This assumes that messages are in chronological order (oldest first)
-      messages.forEach((msg, index) => {
-        // Use the index as a pseudo-timestamp (higher index = newer message)
-        msg.timestamp = index;
-      });
-      
-      // Explicitly sort messages in reverse order (newest first)
-      messages.sort((a, b) => b.timestamp - a.timestamp);
-      
-      console.error('Messages sorted in reverse order (newest first)');
-    } else {
-      console.error('Messages have timestamp property, ensuring they are sorted');
-      
-      // Explicitly sort messages by timestamp in descending order (newest first)
-      messages.sort((a, b) => b.timestamp - a.timestamp);
-    }
-    
-    // Limit to the requested number of messages
-    messages = messages.slice(0, limit);
-    
-    // Log the timestamps of the first few messages to verify they're in descending order
-    if (messages.length > 0) {
-      console.error(`First message role: ${messages[0].role}, timestamp: ${messages[0].timestamp}`);
-      if (messages.length > 1) {
-        console.error(`Second message role: ${messages[1].role}, timestamp: ${messages[1].timestamp}`);
-      }
-      if (messages.length > 2) {
-        console.error(`Third message role: ${messages[2].role}, timestamp: ${messages[2].timestamp}`);
-      }
-    }
-    
-    console.error(`Returning ${messages.length} messages`);
+    // Get conversation messages
+    const messages = await getConversationHistory(tasksDir, task_id, { limit });
     return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(messages, null, 2)
-        }
-      ]
+        content: [
+            {
+                type: 'text',
+                text: JSON.stringify({
+                    task_id,
+                    message_count: messages.length,
+                    messages
+                }, null, 2),
+            },
+        ],
     };
-  } catch (error) {
-    console.error(`Error in get_last_n_messages: ${error.message}`);
-    throw new Error(`Failed to get conversation history: ${error.message}`);
-  }
 }
-
 /**
- * Handle the get_messages_since tool
+ * Handle get_messages_since tool call
  */
-async function handleGetMessagesSince(args, tasksDir) {
-    try {
-        console.error(`Handling get_messages_since with args: ${JSON.stringify(args)}`);
-        const { task_id, since, limit } = GetMessagesSinceSchema.parse(args);
-        const messages = await getConversationHistory(tasksDir, task_id, { since, limit });
-        console.error(`Retrieved ${messages.length} messages since ${since}`);
-        return {
-            content: [
-                {
-                    type: 'text',
-                    text: JSON.stringify(messages, null, 2)
-                }
-            ]
-        };
-    } catch (error) {
-        console.error(`Error in get_messages_since: ${error.message}`);
-        throw new Error(`Failed to get messages since ${args.since}: ${error.message}`);
+async function handleGetMessagesSince(tasksDir, args) {
+    const { task_id, since, limit } = GetMessagesSinceSchema.parse(args);
+    // Get messages since timestamp
+    const messages = await getConversationHistory(tasksDir, task_id, { since, limit });
+    return {
+        content: [
+            {
+                type: 'text',
+                text: JSON.stringify({
+                    task_id,
+                    since: new Date(since).toISOString(),
+                    message_count: messages.length,
+                    messages
+                }, null, 2),
+            },
+        ],
+    };
+}
+/**
+ * Handle get_conversation_summary tool call
+ */
+async function handleGetConversationSummary(tasksDir, args) {
+    const { task_id } = GetConversationSummarySchema.parse(args);
+    // Get conversation summary
+    const summary = await getTaskSummary(tasksDir, task_id);
+    return {
+        content: [
+            {
+                type: 'text',
+                text: JSON.stringify(summary, null, 2),
+            },
+        ],
+    };
+}
+/**
+ * Handle find_code_discussions tool call
+ */
+async function handleFindCodeDiscussions(tasksDir, args) {
+    const { task_id, filename } = FindCodeDiscussionsSchema.parse(args);
+    // Find code discussions
+    const discussions = await findCodeDiscussions(tasksDir, task_id, filename || null);
+    return {
+        content: [
+            {
+                type: 'text',
+                text: JSON.stringify({
+                    task_id,
+                    filename: filename || 'all',
+                    discussion_count: discussions.length,
+                    discussions
+                }, null, 2),
+            },
+        ],
+    };
+}
+/**
+ * Handle list_recent_tasks tool call
+ */
+async function handleListRecentTasks(tasksDir, args) {
+    const { limit } = ListRecentTasksSchema.parse(args);
+    // List tasks
+    const allTasks = await listTasks(tasksDir);
+    const limitedTasks = allTasks.slice(0, limit);
+    // Get details for each task
+    const taskDetails = await Promise.all(limitedTasks.map(async (task) => await getTask(tasksDir, task.id)));
+    return {
+        content: [
+            {
+                type: 'text',
+                text: JSON.stringify({
+                    task_count: taskDetails.length,
+                    tasks: taskDetails
+                }, null, 2),
+            },
+        ],
+    };
+}
+/**
+ * Handle get_task_by_id tool call
+ */
+async function handleGetTaskById(tasksDir, args) {
+    const { task_id } = GetTaskByIdSchema.parse(args);
+    // Get task details
+    const task = await getTask(tasksDir, task_id);
+    // Get a preview of the conversation
+    const previewMessages = await getConversationHistory(tasksDir, task_id, { limit: 5 });
+    return {
+        content: [
+            {
+                type: 'text',
+                text: JSON.stringify({
+                    ...task,
+                    preview_messages: previewMessages
+                }, null, 2),
+            },
+        ],
+    };
+}
+/**
+ * Handle search_conversations tool call
+ */
+async function handleSearchConversations(tasksDir, args) {
+    const { search_term, limit, max_tasks_to_search } = SearchConversationsSchema.parse(args);
+    // Search conversations
+    const results = await searchConversations(tasksDir, search_term, {
+        limit,
+        maxTasksToSearch: max_tasks_to_search
+    });
+    return {
+        content: [
+            {
+                type: 'text',
+                text: JSON.stringify({
+                    search_term,
+                    result_count: results.length,
+                    results
+                }, null, 2),
+            },
+        ],
+    };
+}
+/**
+ * Handle get_vscode_workspaces tool call
+ */
+async function handleGetVSCodeWorkspaces(args) {
+    const _ = GetVSCodeWorkspacesSchema.parse(args);
+    // Get VS Code workspaces
+    const workspaces = getVSCodeWorkspaces();
+    return {
+        content: [
+            {
+                type: 'text',
+                text: JSON.stringify({
+                    workspaces,
+                    count: workspaces.length
+                }, null, 2),
+            },
+        ],
+    };
+}
+/**
+ * Handle analyze_workspace tool call
+ */
+async function handleAnalyzeWorkspace(args) {
+    const { workspacePath, hoursBack } = AnalyzeWorkspaceSchema.parse(args);
+    // Check if the workspace exists
+    if (!fs.existsSync(workspacePath)) {
+        throw new McpError(ErrorCode.InvalidParams, `Workspace path does not exist: ${workspacePath}`);
     }
-}
-
-/**
- * Handle the get_conversation_summary tool
- */
-async function handleGetConversationSummary(args, tasksDir) {
-    try {
-        console.error(`Handling get_conversation_summary with args: ${JSON.stringify(args)}`);
-        const { task_id } = GetConversationSummarySchema.parse(args);
-        const summary = await getTaskSummary(tasksDir, task_id);
-        
-        // Add a note about the lastActivityTimestamp
-        const summaryWithNote = {
-            ...summary,
-            note: "The lastActivityTimestamp represents the most recent activity in this task, based on the modification time of the conversation files. The timestamp is the creation time of the task."
-        };
-        
-        console.error(`Generated summary for task ${task_id}`);
-        return {
-            content: [
-                {
-                    type: 'text',
-                    text: JSON.stringify(summaryWithNote, null, 2)
-                }
-            ]
-        };
-    } catch (error) {
-        console.error(`Error in get_conversation_summary: ${error.message}`);
-        throw new Error(`Failed to generate task summary: ${error.message}`);
-    }
-}
-
-/**
- * Handle the find_code_discussions tool
- */
-async function handleFindCodeDiscussions(args, tasksDir) {
-    try {
-        console.error(`Handling find_code_discussions with args: ${JSON.stringify(args)}`);
-        const { task_id, filename } = FindCodeDiscussionsSchema.parse(args);
-        const discussions = await findCodeDiscussions(tasksDir, task_id, filename);
-        console.error(`Found ${discussions.length} code discussions`);
-        return {
-            content: [
-                {
-                    type: 'text',
-                    text: JSON.stringify(discussions, null, 2)
-                }
-            ]
-        };
-    } catch (error) {
-        console.error(`Error in find_code_discussions: ${error.message}`);
-        throw new Error(`Failed to find code discussions: ${error.message}`);
-    }
-}
-
-/**
- * Handle the list_recent_tasks tool
- */
-async function handleListRecentTasks(args, tasksDir) {
-    try {
-        console.error(`Handling list_recent_tasks with args: ${JSON.stringify(args)}`);
-        const { limit } = ListRecentTasksSchema.parse(args);
-        const tasks = await listTasks(tasksDir, limit);
-        
-        // Add a note about which timestamp to use for determining the "latest" task
-        const tasksWithNote = {
-            tasks,
-            note: "Tasks are sorted by lastActivityTimestamp (most recent activity first). Use lastActivityTimestamp to determine which task is the 'latest' one, not the timestamp (which is the creation time)."
-        };
-        
-        console.error(`Listed ${tasks.length} tasks`);
-        return {
-            content: [
-                {
-                    type: 'text',
-                    text: JSON.stringify(tasksWithNote, null, 2)
-                }
-            ]
-        };
-    } catch (error) {
-        console.error(`Error in list_recent_tasks: ${error.message}`);
-        throw new Error(`Failed to list recent tasks: ${error.message}`);
-    }
-}
-
-/**
- * Handle the get_task_by_id tool
- */
-async function handleGetTaskById(args, tasksDir) {
-    try {
-        console.error(`Handling get_task_by_id with args: ${JSON.stringify(args)}`);
-        const { task_id } = GetTaskByIdSchema.parse(args);
-        const task = await getTask(tasksDir, task_id);
-        const messages = await getConversationHistory(tasksDir, task_id, { limit: 10 });
-        
-        // Add a note about the lastActivityTimestamp
-        const taskWithNote = {
-            task,
-            messages,
-            note: "The lastActivityTimestamp represents the most recent activity in this task, based on the modification time of the conversation files. The timestamp is the creation time of the task."
-        };
-        
-        console.error(`Retrieved task ${task_id} with ${messages.length} messages`);
-        return {
-            content: [
-                {
-                    type: 'text',
-                    text: JSON.stringify(taskWithNote, null, 2)
-                }
-            ]
-        };
-    } catch (error) {
-        console.error(`Error in get_task_by_id: ${error.message}`);
-        throw new Error(`Failed to get task by ID: ${error.message}`);
-    }
-}
-
-/**
- * Handle the search_conversations tool
- */
-async function handleSearchConversations(args, tasksDir) {
-    try {
-        console.error(`Handling search_conversations with args: ${JSON.stringify(args)}`);
-        const { search_term, limit, max_tasks_to_search } = SearchConversationsSchema.parse(args);
-        
-        // Call searchConversations with the correct parameters
-        const results = await searchConversations(tasksDir, search_term, limit, max_tasks_to_search);
-        
-        // Add a note about how tasks are sorted
-        const resultsWithNote = {
-            ...results,
-            note: "Tasks are searched in order of lastActivityTimestamp (most recent activity first), not by creation timestamp."
-        };
-        
-        console.error(`Found ${results.results.length} results for search term "${search_term}"`);
-        return {
-            content: [
-                {
-                    type: 'text',
-                    text: JSON.stringify(resultsWithNote, null, 2)
-                }
-            ]
-        };
-    } catch (error) {
-        console.error(`Error in search_conversations: ${error.message}`);
-        throw new Error(`Failed to search conversations: ${error.message}`);
-    }
-}
-
-/**
- * Handle the search_by_context tool
- */
-async function handleSearchByContext(args, tasksDir) {
-    try {
-        console.error(`Handling search_by_context with args: ${JSON.stringify(args)}`);
-        const { context_term, time_range, context_lines, max_results } = SearchByContextSchema.parse(args);
-        
-        // First, search for conversations containing the context term
-        const searchResults = await searchConversations(tasksDir, context_term, max_results, 20);
-        console.error(`Found ${searchResults.results.length} initial results for context term "${context_term}"`);
-        
-        // Process each result to include context
-        const resultsWithContext = [];
-        
-        for (const result of searchResults.results) {
-            // Get the task ID from the result
-            const taskId = result.taskId;
-            
-            // Get all messages for this task
-            const allMessages = await getConversationHistory(tasksDir, taskId, { limit: 1000 });
-            console.error(`Retrieved ${allMessages.length} messages for task ${taskId}`);
-            
-            // Find the index of the matching message
-            const matchIndex = allMessages.findIndex(msg => {
-                const content = typeof msg.content === 'string' 
-                    ? msg.content 
-                    : JSON.stringify(msg.content);
-                return content.toLowerCase().includes(context_term.toLowerCase());
-            });
-            
-            if (matchIndex !== -1) {
-                // Apply time range filter if specified
-                if (time_range) {
-                    const { start, end } = time_range;
-                    if (start && allMessages[matchIndex].timestamp < start) continue;
-                    if (end && allMessages[matchIndex].timestamp > end) continue;
-                }
-                
-                // Get context messages (messages before and after the match)
-                const startIdx = Math.max(0, matchIndex - context_lines);
-                const endIdx = Math.min(allMessages.length - 1, matchIndex + context_lines);
-                
-                // Extract the context messages
-                const contextMessages = allMessages.slice(startIdx, endIdx + 1);
-                
-                // Add to results
-                resultsWithContext.push({
-                    task_id: taskId,
-                    task_created: result.timestamp,
-                    match_index: matchIndex,
-                    context_messages: contextMessages,
-                    context_range: {
-                        start: startIdx,
-                        end: endIdx,
-                        total_messages: allMessages.length
-                    }
-                });
-                
-                // Stop if we've reached the maximum number of results
-                if (resultsWithContext.length >= max_results) break;
-            }
+    // Get workspace info
+    const workspaceInfo = getWorkspaceInfo(workspacePath);
+    // Get VS Code settings
+    const settings = getWorkspaceSettings(workspacePath);
+    // Get launch configurations
+    const launchConfig = getLaunchConfigurations(workspacePath);
+    // Get recommended extensions
+    const extensions = getRecommendedExtensions(workspacePath);
+    // Get Git info if it's a repo
+    const gitInfo = await getRecentChanges(workspacePath);
+    // Get recently modified files
+    const recentFiles = getRecentlyModifiedFiles(workspacePath, hoursBack);
+    // Group files by type for better analysis
+    const filesByType = {};
+    recentFiles.forEach(file => {
+        const ext = file.extension || 'unknown';
+        if (!filesByType[ext])
+            filesByType[ext] = [];
+        filesByType[ext].push(file);
+    });
+    // Prepare the result
+    const result = {
+        workspace: workspaceInfo,
+        settings,
+        launchConfig,
+        extensions,
+        gitInfo,
+        recentFiles: {
+            count: recentFiles.length,
+            byType: filesByType,
+            mostRecent: recentFiles.slice(0, 10) // Just the 10 most recent
         }
-        
-        console.error(`Processed ${resultsWithContext.length} results with context`);
-        
-        // Add a note about how tasks are sorted
-        const resultsWithContextAndNote = {
-            context_term,
-            result_count: resultsWithContext.length,
-            results: resultsWithContext,
-            note: "Tasks are searched in order of lastActivityTimestamp (most recent activity first), not by creation timestamp."
-        };
-        
+    };
+    return {
+        content: [
+            {
+                type: 'text',
+                text: JSON.stringify(result, null, 2),
+            },
+        ],
+    };
+}
+/**
+ * Handle get_file_history tool call
+ */
+async function handleGetFileHistory(args) {
+    const { filePath } = GetFileHistorySchema.parse(args);
+    // Check if the file exists
+    if (!fs.existsSync(filePath)) {
+        throw new McpError(ErrorCode.InvalidParams, `File does not exist: ${filePath}`);
+    }
+    // Try to find the Git repo that contains this file
+    const repoPath = findGitRepository(filePath);
+    if (repoPath) {
+        // Get Git history for the file
+        const history = await getFileHistory(repoPath, filePath);
         return {
             content: [
                 {
                     type: 'text',
-                    text: JSON.stringify(resultsWithContextAndNote, null, 2)
-                }
-            ]
+                    text: JSON.stringify(history, null, 2),
+                },
+            ],
         };
-    } catch (error) {
-        console.error(`Error in search_by_context: ${error.message}`);
-        throw new Error(`Failed to search by context: ${error.message}`);
+    }
+    // If not in a Git repo, just return file info
+    try {
+        const stats = fs.statSync(filePath);
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: JSON.stringify({
+                        isGitRepo: false,
+                        fileInfo: {
+                            path: filePath,
+                            lastModified: stats.mtime,
+                            size: stats.size,
+                            created: stats.birthtime
+                        }
+                    }, null, 2),
+                },
+            ],
+        };
+    }
+    catch (error) {
+        throw new McpError(ErrorCode.InternalError, `Failed to get file info: ${error.message}`);
+    }
+}
+/**
+ * Handle analyze_cline_activity tool call
+ */
+async function handleAnalyzeCloneActivity(args) {
+    const { hoursBack } = AnalyzeCloneActivitySchema.parse(args);
+    // Get all VS Code workspaces
+    const workspaces = getVSCodeWorkspaces();
+    const results = [];
+    for (const workspace of workspaces) {
+        // Skip if not a real path
+        if (!fs.existsSync(workspace))
+            continue;
+        // Get workspace info
+        const workspaceInfo = getWorkspaceInfo(workspace);
+        // Check if it's a Git repo
+        const gitInfo = await getRecentChanges(workspace);
+        // Get recently modified files
+        const recentFiles = getRecentlyModifiedFiles(workspace, hoursBack);
+        // Only include workspaces with recent activity
+        if (recentFiles.length > 0 || (gitInfo.isGitRepo && gitInfo.commits && gitInfo.commits.length > 0)) {
+            results.push({
+                workspace: workspaceInfo,
+                path: workspace,
+                gitInfo,
+                recentFileCount: recentFiles.length,
+                mostRecentFiles: recentFiles.slice(0, 5).map(f => ({
+                    path: path.relative(workspace, f.path),
+                    lastModified: f.lastModified
+                }))
+            });
+        }
+    }
+    // Sort results by number of recent files (most active first)
+    results.sort((a, b) => b.recentFileCount - a.recentFileCount);
+    return {
+        content: [
+            {
+                type: 'text',
+                text: JSON.stringify({
+                    timestamp: new Date().toISOString(),
+                    workspaceCount: results.length,
+                    workspaces: results
+                }, null, 2),
+            },
+        ],
+    };
+}
+/**
+ * Handle analyze_conversation tool call
+ */
+async function handleAnalyzeConversation(tasksDir, args) {
+    const { task_id, minutes_back } = AnalyzeConversationSchema.parse(args);
+    // Get the API conversation file path
+    const apiFilePath = getApiConversationFilePath(tasksDir, task_id);
+    // Calculate timestamp for filtering if minutes_back is provided
+    const since = minutes_back ? Date.now() - (minutes_back * 60 * 1000) : 0;
+    // Analyze the conversation
+    const analysis = await analyzeConversation(apiFilePath, since);
+    return {
+        content: [
+            {
+                type: 'text',
+                text: JSON.stringify({
+                    task_id,
+                    time_window: minutes_back ? `last ${minutes_back} minutes` : 'all',
+                    analysis
+                }, null, 2),
+            },
+        ],
+    };
+}
+/**
+ * Handle get_git_diff tool call
+ */
+async function handleGetGitDiff(args) {
+    const { filePath, oldRef, newRef } = GetGitDiffSchema.parse(args);
+    // Check if the file exists
+    if (!fs.existsSync(filePath)) {
+        throw new McpError(ErrorCode.InvalidParams, `File does not exist: ${filePath}`);
+    }
+    // Try to find the Git repo that contains this file
+    const repoPath = findGitRepository(filePath);
+    if (!repoPath) {
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: JSON.stringify({
+                        isGitRepo: false,
+                        error: 'File is not in a Git repository'
+                    }, null, 2),
+                },
+            ],
+        };
+    }
+    // Get Git diff for the file
+    const diff = await getGitDiff(repoPath, filePath, oldRef, newRef);
+    return {
+        content: [
+            {
+                type: 'text',
+                text: JSON.stringify(diff, null, 2),
+            },
+        ],
+    };
+}
+/**
+ * Start the MCP server
+ */
+export async function startMcpServer() {
+    try {
+        // Get the VS Code tasks directory based on the current OS
+        const tasksDir = getVSCodeTasksDirectory();
+        // Initialize MCP server
+        const server = await initMcpServer(tasksDir);
+        // Connect to transport
+        const transport = new StdioServerTransport();
+        await server.connect(transport);
+        console.error('Claude Task Reader MCP server running on stdio');
+        console.error(`Using VS Code tasks directory: ${tasksDir}`);
+        // Handle process termination
+        process.on('SIGINT', async () => {
+            console.log('Shutting down server...');
+            process.exit(0);
+        });
+    }
+    catch (error) {
+        console.error('Error starting MCP server:', error);
+        process.exit(1);
     }
 }

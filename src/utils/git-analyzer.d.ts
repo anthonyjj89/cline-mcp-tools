@@ -56,3 +56,62 @@ export function getFileHistory(repoPath: string, filePath: string): Promise<GitF
  * @returns Path to the repository or null if not found
  */
 export function findGitRepository(filePath: string): string | null;
+
+/**
+ * Git diff line information
+ */
+export interface GitDiffLine {
+  type: 'added' | 'removed' | 'context';
+  content: string;
+}
+
+/**
+ * Git diff hunk information
+ */
+export interface GitDiffHunk {
+  header: string;
+  lines: GitDiffLine[];
+}
+
+/**
+ * Git diff file information
+ */
+export interface GitDiffFile {
+  header: string;
+  oldFile?: string;
+  newFile?: string;
+  hunks: GitDiffHunk[];
+}
+
+/**
+ * Git diff parsed result
+ */
+export interface GitDiffParsed {
+  changes: GitDiffFile[];
+}
+
+/**
+ * Git diff information
+ */
+export interface GitDiffInfo {
+  isGitRepo: boolean;
+  command?: string;
+  rawDiff?: string;
+  parsedDiff?: GitDiffParsed;
+  error?: string;
+}
+
+/**
+ * Get diff between commits or working directory and HEAD
+ * @param repoPath - Path to the repository
+ * @param filePath - Path to the file
+ * @param oldRef - Old reference (commit hash, branch, etc.)
+ * @param newRef - New reference (commit hash, branch, etc.)
+ * @returns Diff information
+ */
+export function getGitDiff(
+  repoPath: string, 
+  filePath: string, 
+  oldRef?: string, 
+  newRef?: string
+): Promise<GitDiffInfo>;

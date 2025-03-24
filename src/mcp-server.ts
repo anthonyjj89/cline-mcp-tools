@@ -22,10 +22,10 @@ import {
   registerVSCodeMonitoringTools
 } from './vscode-monitoring.js';
 import { getVSCodeWorkspaces, getRecentlyModifiedFiles } from './utils/vscode-tracker.js';
-import { getRecentChanges, getFileHistory, findGitRepository } from './utils/git-analyzer.js';
+import { getRecentChanges, getFileHistory, findGitRepository, getGitDiff } from './utils/git-analyzer.js';
 import { getWorkspaceSettings, getWorkspaceInfo, getLaunchConfigurations, getRecommendedExtensions } from './utils/vscode-settings.js';
 import { z } from 'zod';
-import { getVSCodeTasksDirectory } from './utils/paths.js';
+import { getVSCodeTasksDirectory, getApiConversationFilePath } from './utils/paths.js';
 import {
   listTasks,
   getTask,
@@ -36,6 +36,7 @@ import {
   searchConversations,
   findCodeDiscussions
 } from './services/index.js';
+import { analyzeConversation } from './utils/conversation-analyzer-simple.js';
 import { Message } from './models/task.js';
 
 // Schema definitions for MCP tools
@@ -91,6 +92,19 @@ const SearchConversationsSchema = z.object({
     .describe('Maximum number of tasks to search (default: 10, max: 20)')
     .default(10)
     .transform(val => Math.min(val, 20))
+});
+
+const AnalyzeConversationSchema = z.object({
+  task_id: z.string().describe('Task ID (timestamp) of the conversation'),
+  minutes_back: z.number()
+    .optional()
+    .describe('Only analyze messages from the last X minutes (optional)')
+});
+
+const GetGitDiffSchema = z.object({
+  filePath: z.string().describe('Path to the file to get diff for'),
+  oldRef: z.string().optional().describe('Old Git reference (commit hash, branch, etc.)'),
+  newRef: z.string().optional().describe('New Git reference (commit hash, branch, etc.)')
 });
 
 /**
@@ -300,6 +314,46 @@ export async function initMcpServer(tasksDir: string): Promise<Server> {
             },
             required: ['search_term']
           }
+        },
+        {
+          name: 'analyze_conversation',
+          description: 'Analyze a conversation to extract key information, topics, and patterns',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              task_id: {
+                type: 'string',
+                description: 'Task ID (timestamp) of the conversation'
+              },
+              minutes_back: {
+                type: 'number',
+                description: 'Only analyze messages from the last X minutes (optional)'
+              }
+            },
+            required: ['task_id']
+          }
+        },
+        {
+          name: 'get_git_diff',
+          description: 'Get Git diff for a specific file between references or working directory and HEAD',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              filePath: {
+                type: 'string',
+                description: 'Path to the file to get diff for'
+              },
+              oldRef: {
+                type: 'string',
+                description: 'Old Git reference (commit hash, branch, etc.)'
+              },
+              newRef: {
+                type: 'string',
+                description: 'New Git reference (commit hash, branch, etc.)'
+              }
+            },
+            required: ['filePath']
+          }
         }
       ]
     };
@@ -345,6 +399,12 @@ export async function initMcpServer(tasksDir: string): Promise<Server> {
         
         case 'search_conversations':
           return await handleSearchConversations(tasksDir, args);
+        
+        case 'analyze_conversation':
+          return await handleAnalyzeConversation(tasksDir, args);
+        
+        case 'get_git_diff':
+          return await handleGetGitDiff(args);
         
         default:
           throw new McpError(
@@ -750,6 +810,79 @@ async function handleAnalyzeCloneActivity(args: unknown) {
           workspaceCount: results.length,
           workspaces: results
         }, null, 2),
+      },
+    ],
+  };
+}
+
+/**
+ * Handle analyze_conversation tool call
+ */
+async function handleAnalyzeConversation(tasksDir: string, args: unknown) {
+  const { task_id, minutes_back } = AnalyzeConversationSchema.parse(args);
+  
+  // Get the API conversation file path
+  const apiFilePath = getApiConversationFilePath(tasksDir, task_id);
+  
+  // Calculate timestamp for filtering if minutes_back is provided
+  const since = minutes_back ? Date.now() - (minutes_back * 60 * 1000) : 0;
+  
+  // Analyze the conversation
+  const analysis = await analyzeConversation(apiFilePath, since);
+  
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify({
+          task_id,
+          time_window: minutes_back ? `last ${minutes_back} minutes` : 'all',
+          analysis
+        }, null, 2),
+      },
+    ],
+  };
+}
+
+/**
+ * Handle get_git_diff tool call
+ */
+async function handleGetGitDiff(args: unknown) {
+  const { filePath, oldRef, newRef } = GetGitDiffSchema.parse(args);
+  
+  // Check if the file exists
+  if (!fs.existsSync(filePath)) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      `File does not exist: ${filePath}`
+    );
+  }
+  
+  // Try to find the Git repo that contains this file
+  const repoPath = findGitRepository(filePath);
+  
+  if (!repoPath) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            isGitRepo: false,
+            error: 'File is not in a Git repository'
+          }, null, 2),
+        },
+      ],
+    };
+  }
+  
+  // Get Git diff for the file
+  const diff = await getGitDiff(repoPath, filePath, oldRef, newRef);
+  
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(diff, null, 2),
       },
     ],
   };

@@ -61,23 +61,21 @@ export async function getUiMessages(tasksDir, taskId) {
  * @param options Search options (limit, maxTasksToSearch)
  * @returns Promise resolving to search results with context
  */
-export async function searchConversations(tasksDir, searchTerm, limit = 20, maxTasksToSearch = 10) {
+export async function searchConversations(tasksDir, searchTerm, options = {}) {
     try {
         if (!searchTerm) {
             throw new Error('Search term is required');
         }
-        
-        // Import listTasks from task-service.js
-        // We need to import it here to avoid circular dependencies
-        const { listTasks } = await import('./task-service.js');
-        
-        // Get list of tasks sorted by lastActivityTimestamp (most recent first)
-        const tasks = await listTasks(tasksDir);
-        
-        // Take only the first maxTasksToSearch tasks
+        const limit = options.limit || 20;
+        const maxTasksToSearch = options.maxTasksToSearch || 10;
+        // Get list of tasks
+        const tasks = await fs.readdir(tasksDir, { withFileTypes: true });
         const taskDirs = tasks
-            .slice(0, maxTasksToSearch)
-            .map(task => task.id);
+            .filter(dir => dir.isDirectory())
+            .map(dir => dir.name)
+            .sort()
+            .reverse() // Newest first, assuming timestamp-based names
+            .slice(0, maxTasksToSearch);
         const results = [];
         // Search each task's conversation history
         for (const taskId of taskDirs) {
@@ -107,7 +105,7 @@ export async function searchConversations(tasksDir, searchTerm, limit = 20, maxT
                 // Continue with next task
             }
         }
-        return { results };
+        return results;
     }
     catch (error) {
         console.error(`Error searching conversations:`, error);
