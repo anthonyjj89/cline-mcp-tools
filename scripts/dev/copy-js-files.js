@@ -11,8 +11,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Source and destination directories
-const srcDir = path.join(__dirname, 'src');
-const buildDir = path.join(__dirname, 'build');
+const rootDir = path.resolve(__dirname, '../..');
+const srcDir = path.join(rootDir, 'src');
+const buildDir = path.join(rootDir, 'build');
 
 /**
  * Copy JavaScript files from src to build
