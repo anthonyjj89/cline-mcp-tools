@@ -5,8 +5,10 @@
 
 import fs from 'fs';
 import { chain } from 'stream-chain';
-import * as Parser from 'stream-json/Parser.js';
-import * as StreamArray from 'stream-json/streamers/StreamArray.js';
+import pkg from 'stream-json/Parser.js';
+const { Parser } = pkg;
+import streamPkg from 'stream-json/streamers/StreamArray.js';
+const { StreamArray } = streamPkg;
 import { Message } from '../models/task.js';
 
 // Common English stop words to filter out
@@ -75,8 +77,8 @@ export async function analyzeConversationStream(
     // Create streaming pipeline
     const pipeline = chain([
       fs.createReadStream(filePath),
-      new Parser.Parser({ jsonStreaming: true }),
-      new StreamArray.StreamArray(),
+      new Parser({ jsonStreaming: true }),
+      new StreamArray(),
       (data: { value: Message }) => {
         const message = data.value;
         

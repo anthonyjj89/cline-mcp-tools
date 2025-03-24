@@ -4,8 +4,10 @@
  */
 import fs from 'fs';
 import { chain } from 'stream-chain';
-import * as Parser from 'stream-json/Parser.js';
-import * as StreamArray from 'stream-json/streamers/StreamArray.js';
+import pkg from 'stream-json/Parser.js';
+const { Parser } = pkg;
+import streamPkg from 'stream-json/streamers/StreamArray.js';
+const { StreamArray } = streamPkg;
 // Common English stop words to filter out
 const stopWords = [
     'a', 'an', 'the', 'and', 'or', 'but', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
@@ -46,8 +48,8 @@ export async function analyzeConversationStream(filePath, since = 0) {
         // Create streaming pipeline
         const pipeline = chain([
             fs.createReadStream(filePath),
-            new Parser.Parser({ jsonStreaming: true }),
-            new StreamArray.StreamArray(),
+            new Parser({ jsonStreaming: true }),
+            new StreamArray(),
             (data) => {
                 const message = data.value;
                 // Skip messages before the time window
