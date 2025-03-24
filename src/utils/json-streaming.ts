@@ -4,12 +4,9 @@
  */
 
 import fs from 'fs';
-import parserPkg from 'stream-json/Parser.js';
-import streamArrayPkg from 'stream-json/streamers/StreamArray.js';
+import { Parser } from 'stream-json/Parser.js';
+import { StreamArray } from 'stream-json/streamers/StreamArray.js';
 import { chain } from 'stream-chain';
-
-const Parser = parserPkg.Parser;
-const StreamArray = streamArrayPkg.StreamArray;
 
 /**
  * Message filter options
