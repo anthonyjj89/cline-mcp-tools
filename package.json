@@ -1,6 +1,6 @@
 {
   "name": "cline-chat-reader-mcp-server",
-  "version": "0.5.3",
+  "version": "0.5.6",
   "type": "module",
   "main": "build/index.js",
   "bin": {
@@ -22,7 +22,8 @@
     "examples": "npm run example:git && npm run example:time && npm run example:vscode && npm run example:crash-recovery",
     "test:crash-reports": "bash scripts/dev/test-crash-reports.sh",
     "test:crash-recovery": "node tests/unit/crash-recovery/test-crash-reports.js",
-    "example:crash-recovery": "node examples/crash-recovery-example.js"
+    "example:crash-recovery": "node examples/crash-recovery-example.js",
+    "test:recover-to-active": "node test-recover-crashed-chat-as-advice.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",

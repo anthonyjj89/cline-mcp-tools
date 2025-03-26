@@ -5,6 +5,26 @@ All notable changes to the Cline Chat Reader MCP Server will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.6] - 2025-03-26
+
+### Added
+- Support for sending recovered chat content to active conversations
+- New `active_label` parameter in `recover_crashed_chat` tool
+- Ability to specify which active conversation (A or B) to send recovered content to
+- Test script for demonstrating the active conversation integration
+- New documentation for the crash recovery to active conversations feature
+- Enhanced user flow for recovering from crashed chats
+
+## [0.5.5] - 2025-03-26
+
+### Added
+- Integration between Crash Recovery and External Advice features
+- New `send_as_advice` parameter in `recover_crashed_chat` tool
+- Ability to send recovered chat content as external advice notifications
+- Test script for demonstrating the new functionality
+- Updated documentation with information about the new parameter
+- Custom advice type "crashed_chat" for recovered chat notifications
+
 ## [0.5.4] - 2025-03-25
 
 ### Changed
