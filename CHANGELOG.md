@@ -5,14 +5,69 @@ All notable changes to the Cline Chat Reader MCP Server will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] - 2025-03-25
+
+### Changed
+- Removed `send_to_active` parameter from `recover_crashed_chat` tool schema
+- Updated documentation and examples to reflect the parameter removal
+- Simplified the crash recovery workflow to use the Active Conversations feature separately
+
+## [0.5.3] - 2025-03-25
+
+### Added
+- Crash Reports Directory feature for storing recovered conversations
+- New `save_to_crashreports` parameter in `recover_crashed_chat` tool
+- Automatic creation of crash reports directories in Cline Ultra
+- Crash report JSON format for easy access and management
+- Test script for verifying crash reports functionality
+- Updated documentation with crash reports directory information
+
+## [0.5.2] - 2025-03-25
+
+### Added
+- Enhanced Crash Recovery feature with user-focused output format
+- Main topic and subtopics detection in crashed conversations
+- Recent conversation flow extraction (last ~15 messages)
+- Current status detection at the time of crash
+- Active files identification based on conversation context
+- Open questions extraction for unanswered queries
+- Comprehensive documentation for the Crash Recovery feature
+- Test scripts for verifying crash recovery functionality
+- Example prompt for using the recover_crashed_chat tool in Claude Desktop
+
+### Changed
+- Completely redesigned the crash recovery output format for better user experience
+- Improved the `formatRecoveredContext` function with a more structured and readable format
+- Enhanced topic analysis with recency weighting for more accurate main topic detection
+- Updated the `recoverCrashedConversation` function to extract more context from crashed conversations
+
+## [0.5.1] - 2025-03-25
+
+### Added
+- Folder-based approach for dismissed notifications in Cline Ultra
+- New `Dismissed` subdirectory within each task's external-advice directory
+- Support for moving notifications between directories when dismissed/restored
+
+### Changed
+- Removed `dismissed` field from notification JSON structure
+- Updated all notification creation code to create the `Dismissed` subdirectory
+- Modified `handleSendExternalAdvice` function to use the folder-based approach
+
 ## [0.5.0] - 2025-03-25
 
 ### Added
+- Active Conversations feature for enhanced Claude Desktop integration
+- New `get_active_task` MCP tool for retrieving active conversations
+- Updated `send_external_advice` tool with `active_label` parameter
+- Support for targeting conversations marked as "Active A" or "Active B"
+- Comprehensive documentation for the Active Conversations feature
+- Test scripts for verifying active conversation functionality
 - Extension type identification in task metadata
 - Explicit `extensionType` field in TaskMetadata interface
 - Enhanced task identification for both Cline Ultra and Cline Regular extensions
 - Comprehensive testing for extension type identification
 - Test script for verifying extension type in task metadata
+- Support for notification dismissal in Cline Ultra with `dismissed` field in notification JSON
 
 ### Changed
 - Modified `getTask` function to include extension type information
@@ -22,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Fixed issue where Claude Desktop was misidentifying tasks based on content analysis
 - Ensured consistent extension type identification across all MCP tools
+- Fixed regression in `send_external_advice` tool to allow using only `active_label` without requiring `task_id`
 
 ## [0.4.0] - 2025-03-24
 

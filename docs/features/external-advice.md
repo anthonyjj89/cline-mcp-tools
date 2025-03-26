@@ -36,13 +36,15 @@ tasks/
   │   ├── api_conversation_history.json  # Conversation history
   │   ├── ui_messages.json      # UI messages
   │   └── external-advice/      # External advice directory
-  │       ├── advice-123.json   # Advice file
-  │       └── advice-456.json   # Another advice file
+  │       ├── advice-123.json   # Active advice file
+  │       ├── advice-456.json   # Another active advice file
+  │       └── Dismissed/        # Subdirectory for dismissed notifications
+  │           └── advice-789.json  # Dismissed advice file
   └── [another_task_id]/
       └── ...
 ```
 
-This structure ensures that each conversation has its own dedicated advice notifications that are contextually relevant to that specific conversation.
+This structure ensures that each conversation has its own dedicated advice notifications that are contextually relevant to that specific conversation. As of version 0.5.1, the system uses a folder-based approach for dismissed notifications, where dismissed notifications are moved to the `Dismissed` subdirectory.
 
 ## Advice Properties
 
@@ -133,6 +135,11 @@ const adviceResponse = await callTool("send_external_advice", {
   task_id: "1742832664949" // The current conversation's task ID
 });
 
+// The MCP server will automatically add the following fields:
+// - timestamp: Date.now()
+// - read: false
+// The MCP server will also create a 'Dismissed' subdirectory for the folder-based approach
+
 // Check if the advice was sent to Cline Ultra
 if (adviceResponse.warning) {
   console.log(adviceResponse.warning); // Will show a warning if sent to standard Cline
@@ -144,6 +151,8 @@ When the user clicks "Read" on this notification in Cline Ultra, the question "H
 ## Implementation Details
 
 The External Advice feature is implemented in the MCP server (`src/mcp-server.ts`). The server creates a directory called `external-advice` inside each specific task folder to store the advice files. Each advice is stored as a JSON file with a unique ID.
+
+As of version 0.5.1, the implementation uses a folder-based approach for dismissed notifications. When the MCP server creates the `external-advice` directory, it also creates a `Dismissed` subdirectory. Active notifications are stored in the main `external-advice` directory, while dismissed notifications are moved to the `Dismissed` subdirectory by the VS Code extension when the user dismisses them.
 
 The implementation includes validation to ensure that the specified task directory exists before creating the advice file. If the task directory doesn't exist, the server will return an error.
 

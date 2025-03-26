@@ -27,6 +27,10 @@ async function sendNotification(type, priority, title, content) {
   // Create the external-advice directory if it doesn't exist
   await fs.mkdirp(adviceDir);
   
+  // Create Dismissed subdirectory for the folder-based approach
+  const dismissedDir = path.join(adviceDir, 'Dismissed');
+  await fs.mkdirp(dismissedDir);
+  
   // Create a unique advice ID
   const adviceId = `advice-${type}-${Date.now()}`;
   
@@ -41,6 +45,7 @@ async function sendNotification(type, priority, title, content) {
     expiresAt: null,
     relatedFiles: [],
     read: false
+    // 'dismissed' field removed - now using folder-based approach instead
   };
   
   // Write the advice to a file

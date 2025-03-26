@@ -4,6 +4,29 @@ This document outlines the planned improvements and future directions for the Cl
 
 ## Version 0.6.0 (Planned)
 
+### MCP Protocol Compatibility Fixes
+- Fix "Method not found" errors in MCP protocol implementation
+- Standardize method naming conventions across all tools
+- Improve error handling for MCP protocol requests
+- Add comprehensive logging for MCP protocol interactions
+- Fix issues with the `recover_crashed_chat` tool when called through the MCP protocol
+
+### Active Conversations and External Advice Enhancements
+- Improve integration between Active Conversations and External Advice features
+- Add support for targeting multiple active conversations with a single advice
+- Implement advice prioritization based on conversation context
+- Add support for rich text content (Markdown) in External Advice
+- Implement advice categories for better organization
+
+### Crash Recovery Improvements
+- Enhance crash recovery analysis with more detailed topic extraction
+- Improve code snippet recovery and formatting
+- Add support for recovering binary files and attachments
+- Implement a more user-friendly interface for crash reports in Cline Ultra
+- Add support for batch recovery of multiple crashed conversations
+
+## Version 0.7.0 (Planned)
+
 ### Git Integration Improvements
 - Add more robust error handling for git operations
 - Implement fallback mechanisms when git commands fail
@@ -23,7 +46,7 @@ This document outlines the planned improvements and future directions for the Cl
 - Optimize file reading operations
 - Add progress indicators for long-running operations
 
-## Version 0.7.0 (Planned)
+## Version 0.8.0 (Planned)
 
 ### Expanded Functionality
 - Add tools for code generation or refactoring suggestions
@@ -36,21 +59,6 @@ This document outlines the planned improvements and future directions for the Cl
 - Implement a "retry with fallback" mechanism for failed operations
 - Add support for user preferences and settings
 - Create a web interface for managing tasks and notifications
-
-## Version 0.8.0 (Planned)
-
-### External Advice Enhancements
-- Add support for rich text content (Markdown)
-- Implement advice categories for better organization
-- Add support for multiple action buttons with different messages
-- Implement a feedback mechanism for users to rate the usefulness of advice
-- Add support for advice templates
-
-### Integration Improvements
-- Add support for more VS Code extensions
-- Implement integration with other IDEs (IntelliJ, etc.)
-- Add support for cloud-based development environments
-- Create plugins for popular code editors
 
 ## Version 1.0.0 (Planned)
 
@@ -66,39 +74,66 @@ This document outlines the planned improvements and future directions for the Cl
 - Role-based access control
 - Audit logging and compliance features
 
-## Current Shortcomings (Based on Testing)
+## Current Issues (v0.5.4)
 
-Based on comprehensive testing with Claude Desktop, we've identified the following shortcomings that need to be addressed in future versions:
+Based on comprehensive testing and recent development, we've identified the following issues that need to be addressed in future versions:
 
-### Git Integration Issues
-- There was an error when trying to access the git repository for uncommitted changes
-- The `get_unpushed_commits` tool didn't show results in the conversation
-- The `get_git_diff` for src/mcp-server.ts wasn't executed or didn't return results
+### MCP Protocol Compatibility Issues
+- Some MCP tools encounter "Method not found" errors due to inconsistencies in method naming conventions
+- The `recover_crashed_chat` tool works correctly when called directly but has issues when called through the MCP protocol
+- Workaround: Use the direct call approach with `test-crash-recovery-direct-call.js` for reliable crash recovery
 
-### Error Handling
-- When a tool fails (like the git repository access), the system could provide more helpful error messages
-- Fallback options are needed when primary methods fail
-- Better error reporting for missing files or repositories
+### Data Volume and Filtering
+- The `find_code_discussions` tool returns too much data, making it difficult to use effectively
+- Need to add better filtering options or pagination for large result sets
+- Improve result formatting for better readability
 
-### Visualization
-- Results are returned as raw JSON, which isn't very user-friendly for complex data structures
-- Code snippets lack syntax highlighting
-- Large result sets are difficult to navigate
+### Naming Convention Inconsistencies
+- Some references to "Claude Task Reader" still exist in the codebase
+- Need to update all references to use "Cline Chat Reader" for consistency
 
-### Performance
-- Some operations may be slow with large files or repositories
-- No caching mechanism for frequently accessed data
-- No progress indicators for long-running operations
+### Integration Challenges
+- Better integration needed between Active Conversations and Crash Recovery features
+- Improve error handling when active conversations are not available
+- Enhance compatibility between standard Cline and Cline Ultra extensions
+
+## Recent Improvements (v0.5.0 - v0.5.4)
+
+### Active Conversations (v0.5.0)
+- Added the ability to mark conversations as "Active A" or "Active B"
+- Implemented the `get_active_task` MCP tool
+- Updated all conversation-related tools to support active conversations
+- Added special placeholder values `ACTIVE_A` and `ACTIVE_B`
+
+### External Advice Enhancements (v0.5.1)
+- Implemented folder-based approach for dismissed notifications
+- Added `Dismissed` subdirectory within each task's external-advice directory
+- Added support for moving notifications between directories
+
+### Crash Recovery (v0.5.2 - v0.5.4)
+- Enhanced crash recovery with user-focused output format
+- Added main topic and subtopics detection
+- Implemented recent conversation flow extraction
+- Added current status detection at the time of crash
+- Added active files identification based on conversation context
+- Implemented Crash Reports Directory for storing recovered conversations
+- Added automatic creation of crash reports directories in Cline Ultra
+- Simplified the crash recovery workflow
+
+### Extension Type Identification (v0.5.0)
+- Added explicit `extensionType` field in TaskMetadata interface
+- Improved task identification for both Cline Ultra and Cline Regular extensions
+- Fixed issue where Claude Desktop was misidentifying tasks based on content analysis
 
 ## Potential Improvements
 
-### Better Git Integration
-- Add more robust error handling for git operations
-- Implement fallback mechanisms when git commands fail
-- Add better path resolution for git repositories
-- Support for multiple git providers (GitHub, GitLab, Bitbucket)
+### Better MCP Protocol Implementation
+- Standardize method naming conventions across all tools
+- Improve error handling for MCP protocol requests
+- Add comprehensive logging for MCP protocol interactions
+- Implement a more robust MCP server initialization process
 
-### Enhanced Visualization
+### Enhanced Visualization and User Experience
 - Format tool results in a more readable way (tables, charts, etc.)
 - Add syntax highlighting for code snippets
 - Create visual summaries of conversation analysis

@@ -68,7 +68,12 @@ Would you like me to provide code examples for any of these suggestions?
     expiresAt: null,
     relatedFiles: ["hello-world.html", "styles.css", "script.js"],
     read: false
+    // 'dismissed' field removed - now using folder-based approach instead
   };
+  
+  // Create Dismissed subdirectory for the folder-based approach
+  const dismissedDir = path.join(adviceDir, 'Dismissed');
+  await fs.mkdirp(dismissedDir);
   
   // Write the advice to a file
   const adviceFilePath = path.join(adviceDir, `${adviceId}.json`);

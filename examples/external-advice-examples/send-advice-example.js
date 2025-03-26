@@ -83,6 +83,12 @@ function sendSimpleQuestionAdvice() {
     fs.mkdirSync(adviceDir, { recursive: true });
   }
   
+  // Create Dismissed subdirectory for the folder-based approach
+  const dismissedDir = path.join(adviceDir, 'Dismissed');
+  if (!fs.existsSync(dismissedDir)) {
+    fs.mkdirSync(dismissedDir, { recursive: true });
+  }
+  
   // Create a simple advice with a question
   const advice = {
     id: `advice-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -94,6 +100,7 @@ function sendSimpleQuestionAdvice() {
     expiresAt: null, // Never expires
     relatedFiles: [],
     read: false
+    // 'dismissed' field removed - now using folder-based approach instead
   };
   
   // Write the advice to a file
@@ -136,6 +143,7 @@ function sendWarningAdvice() {
     expiresAt: Date.now() + (7 * 24 * 60 * 60 * 1000), // Expires in 7 days
     relatedFiles: ["src/utils/api-client.js", "src/services/data-service.js"],
     read: false
+    // 'dismissed' field removed - now using folder-based approach instead
   };
   
   // Write the advice to a file
@@ -178,6 +186,7 @@ function sendTipAdvice() {
     expiresAt: Date.now() + (24 * 60 * 60 * 1000), // Expires in 24 hours
     relatedFiles: ["src/utils/calculations.js"],
     read: false
+    // 'dismissed' field removed - now using folder-based approach instead
   };
   
   // Write the advice to a file
@@ -220,6 +229,7 @@ function sendTaskAdvice() {
     expiresAt: null, // Never expires
     relatedFiles: ["src/components/auth.js", "src/utils/validation.js"],
     read: false
+    // 'dismissed' field removed - now using folder-based approach instead
   };
   
   // Write the advice to a file
@@ -264,6 +274,7 @@ function sendAdviceToSpecificTask() {
     expiresAt: null,
     relatedFiles: [],
     read: false
+    // 'dismissed' field removed - now using folder-based approach instead
   };
   
   // Write the advice to a file

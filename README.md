@@ -11,10 +11,14 @@ This MCP server allows Claude Desktop to access and search through VS Code chat 
 - Find code discussions
 - Context-based search with surrounding messages
 - Improved "latest chat" detection using file modification times
-- **NEW**: Time utilities with proper time zone handling
-- **NEW**: Git analysis tools (unpushed commits, uncommitted changes)
-- **NEW**: VS Code workspace monitoring and analysis
-- **NEW**: Conversation analyzer for extracting key information
+- Time utilities with proper time zone handling
+- Git analysis tools (unpushed commits, uncommitted changes)
+- VS Code workspace monitoring and analysis
+- Conversation analyzer for extracting key information
+- External Advice feature for sending recommendations to VS Code
+- Active Conversations feature for enhanced Claude Desktop integration
+- Crash Recovery feature for recovering context from crashed conversations
+- Crash Reports Directory for storing and managing recovered conversations
 
 ## Installation
 
@@ -91,22 +95,95 @@ This script will:
 3. Check the connection to Claude Desktop
 4. Provide example commands for testing the new context search feature
 
-## New Context Search Feature
+## New Features
 
-The new `search_by_context` tool allows you to search for conversations about specific topics and view the surrounding messages for context. This is particularly useful for finding discussions about projects or technical topics.
+### Active Conversations
 
-### Using Context Search in Claude Desktop
+The Active Conversations feature allows users to mark specific VS Code conversations as "Active A" or "Active B", making it easier for Claude Desktop to find and interact with those conversations through the MCP server.
 
-Try these commands in Claude Desktop:
+#### Key Benefits:
+- Improved integration between Claude Desktop and Cline Ultra
+- User control over which conversations to interact with
+- Support for two active conversations (A and B) for working with multiple contexts
+- Graceful fallbacks when active conversations aren't available
 
-1. "Search for conversations about [project/topic] with context"
-2. "Find discussions about [topic] and show me the surrounding messages"
-3. "Look for conversations mentioning [term] and show me the context"
+#### Using Active Conversations:
+- Users mark conversations as "Active A" or "Active B" by clicking the waving hand icon in Cline Ultra
+- Most conversation-related tools now support omitting the `task_id` parameter to automatically use the active conversation
+- Special placeholder values `ACTIVE_A` or `ACTIVE_B` can be used to explicitly request a specific active conversation
+- The `send_external_advice` tool supports the `active_label` parameter to target an active conversation
 
-Example:
-```
-Search for conversations about React project with context and show me 3 messages before and after each match
-```
+For more details, see [Active Conversations Documentation](docs/features/active-conversations.md).
+
+### Crash Recovery
+
+The Crash Recovery feature provides a way to recover context from crashed or corrupted conversations. This feature is particularly useful when a conversation becomes inaccessible due to file corruption, VS Code crashes, or other technical issues.
+
+#### Key Benefits:
+- Extract and analyze content from corrupted conversation files
+- Generate a summary of the conversation's main topics and context
+- Save the recovered context to a dedicated crash reports directory
+- View and manage crash reports through the Cline Ultra extension UI
+
+#### Using Crash Recovery:
+- From Claude Desktop: Use the "Recover Crashed Chat" option in the menu
+- From VS Code (Cline Ultra): Use the "Recover Crashed Conversation" command from the command palette
+- Using the MCP Tool: Use the `recover_crashed_chat` tool programmatically
+
+For more details, see [Crash Recovery Documentation](docs/features/crash-recovery.md).
+
+### External Advice
+
+The External Advice feature allows Claude Desktop to send advice or recommendations directly to the VS Code extension as notifications. This feature enables Claude to proactively provide suggestions, tips, and guidance to users based on their code and context.
+
+#### Key Benefits:
+- Proactive communication from Claude to users outside of the normal conversation flow
+- Contextually relevant notifications for specific conversations
+- Seamless incorporation of advice into ongoing conversations
+- Support for different types and priorities of advice
+
+#### Using External Advice:
+- Claude Desktop uses the `send_external_advice` MCP tool to create an advice notification
+- The advice is stored as a JSON file in the `external-advice` directory within the conversation folder
+- Cline Ultra displays a bell icon with a badge to indicate new notifications
+- Users can view and interact with notifications directly in VS Code
+
+**Note**: The External Advice feature only works with the Cline Ultra VS Code extension, not with the standard Cline extension.
+
+For more details, see [External Advice Documentation](docs/features/external-advice.md).
+
+## Current Status and Known Issues
+
+### Recent Changes (v0.5.4 - March 25, 2025)
+
+- Removed `send_to_active` parameter from `recover_crashed_chat` tool schema
+- Updated documentation and examples to reflect the parameter removal
+- Simplified the crash recovery workflow to use the Active Conversations feature separately
+
+### Known Issues
+
+1. **MCP Protocol Compatibility Issues**:
+   - Some MCP tools may encounter "Method not found" errors due to inconsistencies in method naming conventions
+   - The `recover_crashed_chat` tool works correctly when called directly but may have issues when called through the MCP protocol
+   - Workaround: Use the direct call approach with `test-crash-recovery-direct-call.js` for reliable crash recovery
+
+2. **find_code_discussions Tool Returns Too Much Data**:
+   - The `find_code_discussions` tool works but may return too much data
+   - Future improvement: Add better filtering options or pagination
+
+3. **Naming Convention**:
+   - Some references to "Claude Task Reader" still exist in the codebase
+   - Future improvement: Update all references to use "Cline Chat Reader"
+
+### Fixed Issues
+
+1. **Message Ordering in get_last_n_messages**:
+   - Fixed issue where the tool was returning the first/oldest messages instead of the most recent ones
+   - Modified the `handleGetLastNMessages` function to explicitly sort messages in reverse order
+
+2. **"apiStats is not defined" Error**:
+   - Fixed issue in the `getTask` function in `task-service.js` where there were references to undefined variables
+   - Declared `apiMtime` and `uiMtime` variables at the same scope level as `apiFileSize` and `uiFileSize`
 
 ## Troubleshooting
 
@@ -134,6 +211,8 @@ If you encounter issues with the MCP server, try the following:
 
 6. **Schema serialization issues**: If tools appear in the list but don't work when called, check that Zod schemas are being properly converted to JSON Schema format.
 
+7. **MCP method naming issues**: If you encounter "Method not found" errors, check the method names in your MCP requests. The server may be expecting different method names than what you're using.
+
 ## Technical Details
 
 The server is implemented as a Node.js application using the Model Context Protocol (MCP). It reads conversation data from the VS Code chats directory and provides tools for accessing and searching this data.
@@ -144,99 +223,41 @@ Key files:
 - `services/chat-service.js`: Chat-related functionality
 - `services/conversation-service.js`: Conversation-related functionality
 - `utils/json-streaming.js`: Utilities for streaming JSON data
+- `utils/json-fallback.js`: Fallback JSON parsing methods
 - `utils/paths.js`: Path-related utilities
+- `utils/crash-recovery.ts`: Crash recovery functionality
 
 ## Recent Changes
 
-- Fixed schema serialization issues by converting Zod schemas to JSON Schema format
-- Added detailed logging for better debugging
-- Created comprehensive test scripts for all tools
-- Added the new context search feature
-- Improved error handling and reporting
-- Added lastActivityTimestamp feature for better "latest chat" detection
+### v0.5.4 (March 25, 2025)
+- Removed `send_to_active` parameter from `recover_crashed_chat` tool schema
+- Updated documentation and examples to reflect the parameter removal
+- Simplified the crash recovery workflow to use the Active Conversations feature separately
 
-## Latest Chat Detection
+### v0.5.3 (March 25, 2025)
+- Added Crash Reports Directory feature for storing recovered conversations
+- New `save_to_crashreports` parameter in `recover_crashed_chat` tool
+- Automatic creation of crash reports directories in Cline Ultra
+- Crash report JSON format for easy access and management
 
-The server now uses a more intelligent method to determine which chat is the "latest" one:
+### v0.5.2 (March 25, 2025)
+- Enhanced Crash Recovery feature with user-focused output format
+- Main topic and subtopics detection in crashed conversations
+- Recent conversation flow extraction (last ~15 messages)
+- Current status detection at the time of crash
+- Active files identification based on conversation context
 
-- Previously, chats were sorted based on their creation timestamp (the folder name)
-- Now, chats are sorted based on the `lastActivityTimestamp`, which is the most recent modification time of the conversation files
-- This ensures that the most recently active conversation is considered the "latest" chat, even if it was created earlier than other conversations
-- All tools now include notes about the `lastActivityTimestamp` to explicitly tell Claude to use it to determine which chat is the "latest" one
+### v0.5.1 (March 25, 2025)
+- Folder-based approach for dismissed notifications in Cline Ultra
+- New `Dismissed` subdirectory within each task's external-advice directory
+- Support for moving notifications between directories when dismissed/restored
 
-### Testing the Latest Chat Detection
+### v0.5.0 (March 25, 2025)
+- Active Conversations feature for enhanced Claude Desktop integration
+- New `get_active_task` MCP tool for retrieving active conversations
+- Updated `send_external_advice` tool with `active_label` parameter
+- Support for targeting conversations marked as "Active A" or "Active B"
+- Extension type identification in task metadata
+- Explicit `extensionType` field in TaskMetadata interface
 
-You can test the latest chat detection feature by running:
-
-```bash
-cd /Users/ant/claude-dev-mcp
-node test-latest-chat-fix.js
-```
-
-This script will:
-1. Get chats using the listChats function
-2. Show chats sorted by lastActivityTimestamp
-3. Show chats sorted by directory name (old method)
-4. Verify that chats are correctly sorted by last activity timestamp
-
-## New Features in v0.2.0
-
-### Time Utilities
-
-The server now includes comprehensive time utilities for consistent timestamp formatting with proper time zone awareness:
-
-- **Consistent Time Formatting**: All timestamps in MCP server responses are formatted consistently
-- **Time Zone Awareness**: All timestamps include time zone information for correct interpretation
-- **Human-Readable Timestamps**: Timestamps are presented in both machine-readable and human-readable formats
-- **Time Difference Calculation**: Easy calculation of time differences in a human-readable format
-
-You can test the time utilities by running:
-
-```bash
-node test-time-utilities.js
-```
-
-### Git Analysis Tools
-
-New Git analysis tools have been added to provide insights into Git repositories:
-
-- **Unpushed Commits**: Detect commits that exist locally but haven't been pushed to a remote repository
-- **Uncommitted Changes**: Show all uncommitted changes including modified, staged, and untracked files
-- **Git Diff**: Get detailed diff information for specific files
-- **File History**: Retrieve the Git history for specific files
-
-You can test these features with:
-
-```bash
-node test-unpushed-commits.js /path/to/git/repo
-node test-uncommitted-changes.js /path/to/git/repo
-```
-
-### VS Code Workspace Analysis
-
-The server can now analyze VS Code workspaces to provide insights about:
-
-- Recently opened workspaces
-- Workspace settings and configurations
-- Recently modified files
-- Git repository information
-- Recommended extensions
-
-## Upcoming Tasks
-
-The following tasks are planned for future versions:
-
-### File Consolidation
-
-- Move all project files from previous directories to ensure everything is in one place
-- Organize scripts and utilities in a consistent directory structure
-- Update all references to file paths in the code
-- Create a clean project structure for better maintainability
-
-### Comprehensive Testing
-
-- Develop a more robust testing strategy for all components
-- Create unit tests for individual modules
-- Implement integration tests for the MCP server
-- Set up end-to-end tests with Claude Desktop
-- Document test procedures and expected results
+For a complete list of changes, see the [Changelog](CHANGELOG.md).
