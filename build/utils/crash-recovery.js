@@ -8,17 +8,18 @@ import { analyzeMessages, extractTopics, extractEntities } from './conversation-
 import { readJsonArray } from './json-fallback.js';
 /**
  * Attempt to recover a crashed conversation file
- * @param filePath Path to the conversation file or task ID
+ * @param taskIdOrFilePath Task ID or path to the conversation file
  * @param maxLength Maximum length of the summary
  * @param includeCodeSnippets Whether to include code snippets in the result
  * @returns Promise resolving to the recovery result
  */
-export async function recoverCrashedConversation(filePath, maxLength = 2000, includeCodeSnippets = true) {
-    // Check if filePath is a task ID or a direct file path
-    let actualFilePath = filePath;
-    // If filePath doesn't end with .json, it might be a task ID
-    if (!filePath.endsWith('.json')) {
-        const taskId = filePath;
+export async function recoverCrashedConversation(taskIdOrFilePath, maxLength = 2000, includeCodeSnippets = true) {
+    // Check if input is a task ID or a direct file path
+    let actualFilePath = taskIdOrFilePath;
+    let taskId = '';
+    // If input doesn't end with .json, it's likely a task ID
+    if (!taskIdOrFilePath.endsWith('.json')) {
+        taskId = taskIdOrFilePath;
         // Get both Cline Ultra and standard Cline paths
         const homedir = process.env.HOME || process.env.USERPROFILE || '';
         const ultraPath = path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'tasks', taskId);
@@ -1141,4 +1142,26 @@ export function formatRecoveredContext(recoveredContext) {
     message += `🔄 CONTINUATION\n`;
     message += `Would you like to continue working on ${recoveredContext.main_topic} or focus on a specific aspect of the project?`;
     return message;
+}
+/**
+ * Create a crash report object for saving to the crash reports directory
+ * @param taskId Task ID of the crashed conversation
+ * @param recoveredContext Recovery result
+ * @param formattedMessage Formatted message for display
+ * @returns Crash report object
+ */
+export function createCrashReport(taskId, recoveredContext, formattedMessage) {
+    return {
+        id: `crash-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        task_id: taskId,
+        timestamp: Date.now(),
+        summary: recoveredContext.summary,
+        main_topic: recoveredContext.main_topic,
+        subtopics: recoveredContext.subtopics.slice(0, 5),
+        active_files: recoveredContext.active_files.slice(0, 5),
+        open_questions: recoveredContext.open_questions,
+        current_status: recoveredContext.current_status,
+        formatted_message: formattedMessage,
+        read: false
+    };
 }

@@ -160,3 +160,74 @@ export function formatFileSize(bytes) {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
+/**
+ * Get the platform-specific paths to the VS Code extension crash reports directories
+ * @returns Array of absolute paths to the VS Code extension crash reports directories
+ */
+export function getCrashReportsDirectories() {
+    const homedir = os.homedir();
+    // Define paths for both extensions based on platform
+    const getPaths = () => {
+        switch (process.platform) {
+            case 'win32':
+                return [
+                    // Cline Ultra path only (crash reports are only supported in Ultra)
+                    path.join(process.env.APPDATA || '', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'crashReports')
+                ];
+            case 'darwin':
+                return [
+                    // Cline Ultra path only (crash reports are only supported in Ultra)
+                    path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'crashReports')
+                ];
+            case 'linux':
+                return [
+                    // Cline Ultra path only (crash reports are only supported in Ultra)
+                    path.join(homedir, '.config', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'crashReports')
+                ];
+            default:
+                throw new Error(`Unsupported platform: ${process.platform}`);
+        }
+    };
+    return getPaths();
+}
+/**
+ * Get the appropriate crash reports directory
+ * @returns The crash reports directory path
+ */
+export function getCrashReportsDirectory() {
+    return getCrashReportsDirectories()[0];
+}
+/**
+ * Get the dismissed crash reports directory
+ * @returns The dismissed crash reports directory path
+ */
+export function getDismissedCrashReportsDirectory() {
+    return path.join(getCrashReportsDirectory(), 'Dismissed');
+}
+/**
+ * Check if a path is within the Ultra extension
+ * @param dirPath Directory path to check
+ * @returns True if the path is within the Ultra extension, false otherwise
+ */
+export function isUltraExtensionPath(dirPath) {
+    return dirPath.includes('custom.claude-dev-ultra');
+}
+/**
+ * Ensure the crash reports directories exist
+ * @returns Object containing the created directories
+ */
+export async function ensureCrashReportsDirectories() {
+    const crashReportsDir = getCrashReportsDirectory();
+    const dismissedDir = getDismissedCrashReportsDirectory();
+    let created = false;
+    // Create the directories if they don't exist
+    if (!await fs.pathExists(crashReportsDir)) {
+        await fs.mkdirp(crashReportsDir);
+        created = true;
+    }
+    if (!await fs.pathExists(dismissedDir)) {
+        await fs.mkdirp(dismissedDir);
+        created = true;
+    }
+    return { crashReportsDir, dismissedDir, created };
+}

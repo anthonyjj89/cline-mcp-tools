@@ -59,10 +59,45 @@ const result = await useMcpTool({
     task_id: "1742912459362", // Replace with your task ID
     max_length: 2000,
     include_code_snippets: true,
-    save_to_crashreports: true
+    save_to_crashreports: true,
+    send_as_advice: false // Set to true to send as external advice
   }
 });
 ```
+
+### Sending Recovered Chats as External Advice
+
+In addition to saving recovered chats to the crash reports directory, you can also send them as external advice notifications:
+
+1. Set the `send_as_advice` parameter to `true` when using the MCP tool
+2. The recovered chat content will be sent as an external advice notification to the same conversation
+3. The notification will appear in the VS Code extension's UI with a high priority
+4. Users can view, dismiss, or act on the notification like any other external advice
+
+This integration with the External Advice feature provides a more visible way to alert users about recovered chats and makes it easier to access the recovered content directly from the VS Code interface.
+
+Example of sending a recovered chat as external advice:
+
+```javascript
+// Example of sending a recovered chat as external advice
+const result = await useMcpTool({
+  server_name: "claude-task-reader",
+  tool_name: "recover_crashed_chat",
+  arguments: {
+    task_id: "1742912459362", // Replace with your task ID
+    max_length: 2000,
+    include_code_snippets: true,
+    save_to_crashreports: true,
+    send_as_advice: true // Send as external advice
+  }
+});
+```
+
+The external advice notification will include:
+- A title indicating it's a recovered chat
+- The main topic of the conversation
+- The full recovered content
+- High priority status to ensure visibility
 
 ## Crash Reports Directory and Management
 

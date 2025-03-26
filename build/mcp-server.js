@@ -15,7 +15,7 @@ import { getRecentChanges, getFileHistory, findGitRepository, getGitDiff, getUnp
 import { getWorkspaceSettings, getWorkspaceInfo, getLaunchConfigurations, getRecommendedExtensions } from './utils/vscode-settings.js';
 import { formatTimestamps, getCurrentTime } from './utils/time-utils.js';
 import { z } from 'zod';
-import { getVSCodeTasksDirectory, getApiConversationFilePath, getTasksDirectoryForTask } from './utils/paths.js';
+import { getVSCodeTasksDirectory, getApiConversationFilePath, getTasksDirectoryForTask, ensureCrashReportsDirectories, isUltraExtensionPath } from './utils/paths.js';
 import { listTasks, getTask, getTaskSummary, getConversationHistory, searchConversations, findCodeDiscussions } from './services/index.js';
 import { analyzeConversation } from './utils/conversation-analyzer-simple.js';
 import { recoverCrashedConversation, formatRecoveredContext } from './utils/crash-recovery.js';
@@ -120,13 +120,17 @@ const RecoverCrashedChatSchema = z.object({
         .optional()
         .describe('Whether to include code snippets in the summary')
         .default(true),
-    send_to_active: z.boolean()
+    save_to_crashreports: z.boolean()
         .optional()
-        .describe('Whether to send the recovered context directly to the active conversation (Cline Ultra only)')
+        .describe('Whether to save the recovered context to the crash reports directory (Cline Ultra only)')
+        .default(true),
+    send_as_advice: z.boolean()
+        .optional()
+        .describe('Whether to send the recovered context as an external advice notification')
         .default(false),
     active_label: z.enum(['A', 'B'])
         .optional()
-        .describe('Label of the active conversation to send advice to (Cline Ultra only)')
+        .describe('Label of the active conversation to send advice to (if send_as_advice is true)')
 });
 const SendExternalAdviceSchema = z.object({
     content: z.string().describe('Advice content to send to the user'),
@@ -483,7 +487,7 @@ export async function initMcpServer(tasksDir) {
                 },
                 {
                     name: 'recover_crashed_chat',
-                    description: 'Recover context from a crashed conversation that cannot be reopened',
+                    description: 'Recover context from a crashed conversation that cannot be reopened. Can save the recovered context to the crash reports directory or send it as an external advice notification.',
                     inputSchema: {
                         type: 'object',
                         properties: {
@@ -501,15 +505,20 @@ export async function initMcpServer(tasksDir) {
                                 description: 'Whether to include code snippets in the summary',
                                 default: true
                             },
-                            send_to_active: {
+                            save_to_crashreports: {
                                 type: 'boolean',
-                                description: 'Whether to send the recovered context directly to the active conversation (Cline Ultra only)',
+                                description: 'Whether to save the recovered context to the crash reports directory (Cline Ultra only)',
+                                default: true
+                            },
+                            send_as_advice: {
+                                type: 'boolean',
+                                description: 'Whether to send the recovered context as an external advice notification',
                                 default: false
                             },
                             active_label: {
                                 type: 'string',
                                 enum: ['A', 'B'],
-                                description: 'Label of the active conversation to send advice to (Cline Ultra only)'
+                                description: 'Label of the active conversation to send advice to (if send_as_advice is true)'
                             }
                         },
                         required: ['task_id']
@@ -2149,55 +2158,154 @@ async function handleSendExternalAdvice(tasksDir, args) {
  * Handle recover_crashed_chat tool call
  */
 async function handleRecoverCrashedChat(tasksDir, args) {
-    const { task_id, max_length, include_code_snippets, send_to_active, active_label } = RecoverCrashedChatSchema.parse(args);
+    const { task_id, max_length, include_code_snippets, save_to_crashreports, send_as_advice, active_label } = RecoverCrashedChatSchema.parse(args);
     try {
         // Get the appropriate tasks directory for this specific task
         const specificTasksDir = await getTasksDirectoryForTask(task_id);
         // Get the API conversation file path
         const apiFilePath = getApiConversationFilePath(specificTasksDir, task_id);
         // Attempt to recover the crashed conversation
-        const recoveredContext = await recoverCrashedConversation(apiFilePath, max_length, include_code_snippets);
+        const recoveredContext = await recoverCrashedConversation(task_id, max_length, include_code_snippets);
         // Format the context as a message
         const formattedMessage = formatRecoveredContext(recoveredContext);
-        // If send_to_active is true, send directly to the active conversation
-        if (send_to_active) {
+        // Check if we should save to crash reports directory (only for Ultra)
+        let crashReportSaved = false;
+        let crashReportId = '';
+        let crashReportPath = '';
+        if (save_to_crashreports && isUltraExtensionPath(specificTasksDir)) {
             try {
-                // Use the existing send_external_advice tool
-                const result = await handleSendExternalAdvice(tasksDir, {
-                    content: formattedMessage,
-                    title: "Recovered Context from Crashed Conversation",
-                    type: "info",
-                    priority: "high",
-                    active_label: active_label
-                });
-                return {
-                    content: [
-                        {
-                            type: 'text',
-                            text: JSON.stringify({
-                                ...recoveredContext,
-                                message_sent: true,
-                                message_destination: active_label ? `Active ${active_label}` : "Active conversation"
-                            }, null, 2),
-                        },
-                    ],
+                // Ensure crash reports directories exist
+                const { crashReportsDir, dismissedDir, created } = await ensureCrashReportsDirectories();
+                // Create crash report object
+                crashReportId = `crash-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                const crashReport = {
+                    id: crashReportId,
+                    task_id,
+                    timestamp: Date.now(),
+                    summary: recoveredContext.summary,
+                    main_topic: recoveredContext.main_topic,
+                    formatted_message: formattedMessage,
+                    read: false
                 };
+                // Save the report to the crash reports directory
+                crashReportPath = path.join(crashReportsDir, `${crashReportId}.json`);
+                await fs.writeFile(crashReportPath, JSON.stringify(crashReport, null, 2), 'utf8');
+                crashReportSaved = true;
+                console.log(`Crash report saved to ${crashReportPath}`);
             }
             catch (error) {
-                // Fall back to returning the message if direct sending fails
-                console.error("Failed to send recovered context directly:", error);
+                console.error('Error saving crash report:', error);
             }
         }
-        // Return the recovered context and formatted message
+        // Check if we should send as external advice
+        let adviceSent = false;
+        let adviceId = '';
+        let advicePath = '';
+        let targetTaskId = task_id;
+        let targetTaskLabel = null;
+        if (send_as_advice) {
+            try {
+                // If active_label is specified, find the corresponding task
+                if (active_label) {
+                    // Get active tasks data
+                    const homedir = os.homedir();
+                    const ultraActivePath = path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'active_tasks.json');
+                    const standardActivePath = path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'active_tasks.json');
+                    let activeTasksData = null;
+                    // Try to read the active tasks file from both locations
+                    if (await fs.pathExists(ultraActivePath)) {
+                        try {
+                            const content = await fs.readFile(ultraActivePath, 'utf8');
+                            activeTasksData = JSON.parse(content);
+                        }
+                        catch (error) {
+                            console.error('Error reading ultra active tasks file:', error);
+                        }
+                    }
+                    if (!activeTasksData && await fs.pathExists(standardActivePath)) {
+                        try {
+                            const content = await fs.readFile(standardActivePath, 'utf8');
+                            activeTasksData = JSON.parse(content);
+                        }
+                        catch (error) {
+                            console.error('Error reading standard active tasks file:', error);
+                        }
+                    }
+                    // Find the task with the specified active label
+                    if (activeTasksData && activeTasksData.activeTasks && activeTasksData.activeTasks.length > 0) {
+                        const matchingTask = activeTasksData.activeTasks.find((t) => t.label === active_label);
+                        if (matchingTask) {
+                            targetTaskId = matchingTask.id;
+                            targetTaskLabel = matchingTask.label;
+                            // Use stderr for logging to avoid interfering with JSON parsing
+                            console.error(`Found active task ${targetTaskId} with label ${targetTaskLabel}`);
+                        }
+                        else {
+                            console.error(`No task found with active label ${active_label}, using original task_id`);
+                        }
+                    }
+                }
+                // Get the appropriate tasks directory for the target task
+                const targetTasksDir = await getTasksDirectoryForTask(targetTaskId);
+                // Get the task directory
+                const taskDir = path.join(targetTasksDir, targetTaskId);
+                // Create external advice directory within the specific task folder
+                const adviceDir = path.join(taskDir, 'external-advice');
+                await fs.mkdirp(adviceDir);
+                // Create Dismissed subdirectory for the folder-based approach
+                const dismissedDir = path.join(adviceDir, 'Dismissed');
+                await fs.mkdirp(dismissedDir);
+                // Create advice object
+                adviceId = `crashed-chat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                const advice = {
+                    id: adviceId,
+                    content: formattedMessage,
+                    title: `Recovered Chat: ${recoveredContext.main_topic}`,
+                    type: "crashed_chat", // New type specific to crashed chats
+                    priority: "high",
+                    timestamp: Date.now(),
+                    expiresAt: null, // Never expires
+                    relatedFiles: [],
+                    read: false
+                };
+                // Write advice to file
+                advicePath = path.join(adviceDir, `${advice.id}.json`);
+                await fs.writeFile(advicePath, JSON.stringify(advice, null, 2), 'utf8');
+                adviceSent = true;
+                if (targetTaskId !== task_id) {
+                    console.error(`Crashed chat advice sent to active task ${targetTaskId} (${targetTaskLabel}) at ${advicePath}`);
+                }
+                else {
+                    console.error(`Crashed chat advice sent to ${advicePath}`);
+                }
+            }
+            catch (error) {
+                console.error('Error sending crashed chat as advice:', error);
+            }
+        }
+        // Return a response with the formatted message and crash report/advice info
         return {
             content: [
                 {
                     type: 'text',
                     text: JSON.stringify({
-                        ...recoveredContext,
+                        task_id,
+                        main_topic: recoveredContext.main_topic,
+                        subtopics: recoveredContext.subtopics.slice(0, 5),
+                        summary: recoveredContext.summary,
+                        message_count: recoveredContext.message_count,
                         formatted_message: formattedMessage,
-                        message_sent: false,
-                        instructions: "Copy this message to a new conversation to continue your work"
+                        crash_report_saved: crashReportSaved,
+                        crash_report_id: crashReportId,
+                        crash_report_path: crashReportPath,
+                        advice_sent: adviceSent,
+                        advice_id: adviceId,
+                        advice_path: advicePath,
+                        instructions: adviceSent
+                            ? "A crashed chat notification has been sent to the VS Code extension. Open VS Code to view it."
+                            : (crashReportSaved
+                                ? "A crash report has been saved to the Cline Ultra extension. Open VS Code to view it."
+                                : "Copy this message to a new conversation to continue your work")
                     }, null, 2),
                 },
             ],
