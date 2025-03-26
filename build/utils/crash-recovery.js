@@ -31,23 +31,23 @@ export async function recoverCrashedConversation(taskIdOrFilePath, maxLength = 2
         const standardApiFileAlt = path.join(standardPath, 'api_conversation_history.json');
         // Check all possible file paths
         if (fs.existsSync(ultraApiFile)) {
-            console.log(`Found conversation file in Cline Ultra (hyphen): ${ultraApiFile}`);
+            console.error(`Found conversation file in Cline Ultra (hyphen): ${ultraApiFile}`);
             actualFilePath = ultraApiFile;
         }
         else if (fs.existsSync(ultraApiFileAlt)) {
-            console.log(`Found conversation file in Cline Ultra (underscore): ${ultraApiFileAlt}`);
+            console.error(`Found conversation file in Cline Ultra (underscore): ${ultraApiFileAlt}`);
             actualFilePath = ultraApiFileAlt;
         }
         else if (fs.existsSync(standardApiFile)) {
-            console.log(`Found conversation file in standard Cline (hyphen): ${standardApiFile}`);
+            console.error(`Found conversation file in standard Cline (hyphen): ${standardApiFile}`);
             actualFilePath = standardApiFile;
         }
         else if (fs.existsSync(standardApiFileAlt)) {
-            console.log(`Found conversation file in standard Cline (underscore): ${standardApiFileAlt}`);
+            console.error(`Found conversation file in standard Cline (underscore): ${standardApiFileAlt}`);
             actualFilePath = standardApiFileAlt;
         }
         else {
-            console.warn(`Task ID ${taskId} not found. Using provided path as direct file path.`);
+            console.error(`Task ID ${taskId} not found. Using provided path as direct file path.`);
         }
     }
     // Initialize recovery result
