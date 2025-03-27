@@ -15,7 +15,7 @@ import { getRecentChanges, getFileHistory, findGitRepository, getGitDiff, getUnp
 import { getWorkspaceSettings, getWorkspaceInfo, getLaunchConfigurations, getRecommendedExtensions } from './utils/vscode-settings.js';
 import { formatTimestamps, getCurrentTime } from './utils/time-utils.js';
 import { z } from 'zod';
-import { getVSCodeTasksDirectory, getApiConversationFilePath, getTasksDirectoryForTask, ensureCrashReportsDirectories, isUltraExtensionPath } from './utils/paths.js';
+import { getVSCodeTasksDirectory, getApiConversationFilePath, getTasksDirectoryForTask, ensureCrashReportsDirectories, isStandardClineExtensionPath } from './utils/paths.js';
 import { listTasks, getTask, getTaskSummary, getConversationHistory, searchConversations, findCodeDiscussions } from './services/index.js';
 import { analyzeConversation } from './utils/conversation-analyzer-simple.js';
 import { recoverCrashedConversation, formatRecoveredContext } from './utils/crash-recovery.js';
@@ -122,7 +122,7 @@ const RecoverCrashedChatSchema = z.object({
         .default(true),
     save_to_crashreports: z.boolean()
         .optional()
-        .describe('Whether to save the recovered context to the crash reports directory (Cline Ultra only)')
+        .describe('Whether to save the recovered context to the crash reports directory (standard Cline only)')
         .default(true),
     send_as_advice: z.boolean()
         .optional()
@@ -1896,28 +1896,18 @@ async function handleGetUncommittedChanges(args) {
  */
 async function handleGetActiveTask(args) {
     const { label, task_id } = GetActiveTaskSchema.parse(args);
-    // Look for active_tasks.json file in both standard and Ultra paths
+    // Look for active_tasks.json file in standard path
     const homedir = os.homedir();
-    const ultraPath = path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'active_tasks.json');
     const standardPath = path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'active_tasks.json');
-    // Try ultra path first, then standard path
+    // Try to read the active tasks file
     let activeTasksData = null;
-    if (await fs.pathExists(ultraPath)) {
-        try {
-            const content = await fs.readFile(ultraPath, 'utf8');
-            activeTasksData = JSON.parse(content);
-        }
-        catch (error) {
-            console.error('Error reading ultra active tasks file:', error);
-        }
-    }
-    if (!activeTasksData && await fs.pathExists(standardPath)) {
+    if (await fs.pathExists(standardPath)) {
         try {
             const content = await fs.readFile(standardPath, 'utf8');
             activeTasksData = JSON.parse(content);
         }
         catch (error) {
-            console.error('Error reading standard active tasks file:', error);
+            console.error('Error reading active tasks file:', error);
         }
     }
     // Check if a specific task_id is provided to check its active status
@@ -2108,8 +2098,8 @@ async function handleSendExternalAdvice(tasksDir, args) {
     }
     // Get the appropriate tasks directory for this specific task
     const specificTasksDir = await getTasksDirectoryForTask(targetTaskId);
-    // Check if we're using the Ultra path
-    const isUltra = specificTasksDir.includes('custom.claude-dev-ultra');
+    // Check if we're using the standard Cline path
+    const isStandardCline = isStandardClineExtensionPath(specificTasksDir);
     // Get the task directory
     const taskDir = path.join(specificTasksDir, targetTaskId);
     // Verify the task directory exists
@@ -2148,7 +2138,7 @@ async function handleSendExternalAdvice(tasksDir, args) {
                     message: targetTaskLabel ? `Advice sent to Active ${targetTaskLabel} conversation` : 'Advice sent successfully',
                     targetTask: targetTaskId,
                     activeLabel: targetTaskLabel,
-                    warning: isUltra ? null : 'NOTE: This advice was sent to standard Cline, but the External Advice feature only works with Cline Ultra.'
+                    warning: !isStandardCline ? null : 'NOTE: This advice was sent to standard Cline, but the External Advice feature only works with Cline Ultra.'
                 }, null, 2),
             },
         ],
@@ -2168,11 +2158,11 @@ async function handleRecoverCrashedChat(tasksDir, args) {
         const recoveredContext = await recoverCrashedConversation(task_id, max_length, include_code_snippets);
         // Format the context as a message
         const formattedMessage = formatRecoveredContext(recoveredContext);
-        // Check if we should save to crash reports directory (only for Ultra)
+        // Check if we should save to crash reports directory (only for standard Cline)
         let crashReportSaved = false;
         let crashReportId = '';
         let crashReportPath = '';
-        if (save_to_crashreports && isUltraExtensionPath(specificTasksDir)) {
+        if (save_to_crashreports && isStandardClineExtensionPath(specificTasksDir)) {
             try {
                 // Ensure crash reports directories exist
                 const { crashReportsDir, dismissedDir, created } = await ensureCrashReportsDirectories();
@@ -2304,7 +2294,7 @@ async function handleRecoverCrashedChat(tasksDir, args) {
                         instructions: adviceSent
                             ? "A crashed chat notification has been sent to the VS Code extension. Open VS Code to view it."
                             : (crashReportSaved
-                                ? "A crash report has been saved to the Cline Ultra extension. Open VS Code to view it."
+                                ? "A crash report has been saved to the standard Cline extension. Open VS Code to view it."
                                 : "Copy this message to a new conversation to continue your work")
                     }, null, 2),
                 },
