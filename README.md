@@ -5,6 +5,8 @@
 
 A Model Context Protocol (MCP) server that enables Claude Desktop to access, search, and interact with VS Code chat conversations.
 
+> **IMPORTANT:** This MCP server requires a modified version of the Cline VS Code extension to work properly. You must install the forked version from [https://github.com/anthonyjj89/cline-mcp-external-link](https://github.com/anthonyjj89/cline-mcp-external-link). The standard version from the VS Code marketplace will not work. See the [Compatibility](#compatibility) section for details.
+
 > **Note:** This is the clean main branch with only essential files for production use. For development, testing scripts, and additional examples, please check the [dev branch](https://github.com/anthonyjj89/cline-mcp-tools/tree/dev).
 
 ## Features
@@ -35,7 +37,7 @@ A Model Context Protocol (MCP) server that enables Claude Desktop to access, sea
 
 - Node.js 18.0.0 or higher
 - Claude Desktop application
-- VS Code with Cline extension
+- VS Code with the forked version of the Cline extension (see Compatibility section below)
 
 ### Setup
 
@@ -216,6 +218,17 @@ For more details, see [External Advice Documentation](docs/features/external-adv
 2. **"apiStats is not defined" Error**:
    - Fixed issue in the `getTask` function in `task-service.js` where there were references to undefined variables
    - Declared `apiMtime` and `uiMtime` variables at the same scope level as `apiFileSize` and `uiFileSize`
+
+## Compatibility
+
+### Required VS Code Extension
+
+This MCP server requires a modified version of the Cline VS Code extension to work properly. The standard version of Cline available in the VS Code marketplace does not include the necessary communication methods for this MCP server to function correctly.
+
+**You must install the forked version of the Cline extension from:**
+[https://github.com/anthonyjj89/cline-mcp-external-link](https://github.com/anthonyjj89/cline-mcp-external-link)
+
+A pull request has been submitted to the official Cline extension to incorporate these features. Once merged, the standard version will work with this MCP server. Until then, please use the forked version linked above.
 
 ## Troubleshooting
 
