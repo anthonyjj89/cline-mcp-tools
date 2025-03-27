@@ -98,6 +98,11 @@ export async function getFileHistory(repoPath, filePath) {
  * @returns {string|null} Path to the repository or null if not found
  */
 export function findGitRepository(filePath) {
+  // First check if the provided path itself is a Git repository
+  if (fs.existsSync(path.join(filePath, '.git'))) {
+    return filePath;
+  }
+  
   let currentPath = path.dirname(filePath);
   
   // Walk up the directory tree to find .git folder
