@@ -7,20 +7,8 @@
     "cline-chat-reader": "./build/index.js"
   },
   "scripts": {
-    "build": "tsc && node scripts/dev/copy-js-files.js",
-    "watch": "tsc -w",
-    "start": "node build/index.js",
-    "test": "node tests/unit/git/test-git-analyzer.js",
-    "test:all": "for f in tests/unit/**/*.js; do node $f; done",
-    "test:git": "node tests/unit/git/test-git-analyzer.js && node tests/unit/git/test-git-diff.js && node tests/unit/git/test-uncommitted-changes.js && node tests/unit/git/test-unpushed-commits.js",
-    "test:crash-recovery": "node tests/unit/crash-recovery/test-crash-reports.js",
-    "test:integration": "node tests/test-claude-integration.js",
-    "test:tools": "node tests/test-tools.js",
-    "example:git": "node examples/git-examples/unpushed-commits-example.js",
-    "example:time": "node examples/time-examples/time-formatting-example.js",
-    "example:vscode": "node examples/vscode-examples/workspace-monitoring-example.js",
-    "example:crash-recovery": "node examples/crash-recovery-example.js",
-    "examples": "npm run example:git && npm run example:time && npm run example:vscode && npm run example:crash-recovery"
+    "build": "tsc",
+    "start": "node build/index.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",

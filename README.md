@@ -5,6 +5,8 @@
 
 A Model Context Protocol (MCP) server that enables Claude Desktop to access, search, and interact with VS Code chat conversations.
 
+> **Note:** This is the clean main branch with only essential files for production use. For development, testing scripts, and additional examples, please check the [dev branch](https://github.com/anthonyjj89/cline-mcp-tools/tree/dev).
+
 ## Features
 
 - **Conversation Management**
