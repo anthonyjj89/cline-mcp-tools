@@ -43,21 +43,3 @@ yarn-error.log*
 # Backup files
 *.backup
 *.bak
-backup/
-
-# Development files
-memory-bank/
-test-*.js
-debug-*.js
-*-debug-*.js
-*-debug.*
-implement-*.js
-verify-*.js
-check-*.js
-mark-*.js
-send-*.js
-restart-*.sh
-
-# Keep essential test files
-!tests/**/*.js
-!examples/**/*.js
