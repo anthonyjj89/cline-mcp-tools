@@ -1,55 +1,83 @@
 # Cline Chat Reader MCP Server
 
-This MCP server allows Claude Desktop to access and search through VS Code chat conversations.
+[![Version](https://img.shields.io/badge/version-0.5.6-blue.svg)](https://github.com/anthonyjj89/cline-mcp-tools)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+A Model Context Protocol (MCP) server that enables Claude Desktop to access, search, and interact with VS Code chat conversations.
 
 ## Features
 
-- List recent VS Code chats/conversations
-- Get conversation history
-- Search across conversations
-- Generate conversation summaries
-- Find code discussions
-- Context-based search with surrounding messages
-- Improved "latest chat" detection using file modification times
-- Time utilities with proper time zone handling
-- Git analysis tools (unpushed commits, uncommitted changes)
-- VS Code workspace monitoring and analysis
-- Conversation analyzer for extracting key information
-- External Advice feature for sending recommendations to VS Code
-- Active Conversations feature for enhanced Claude Desktop integration
-- Crash Recovery feature for recovering context from crashed conversations
-- Crash Reports Directory for storing and managing recovered conversations
+- **Conversation Management**
+  - List recent VS Code chats/conversations
+  - Get conversation history
+  - Search across conversations
+  - Generate conversation summaries
+  - Find code discussions
+  - Context-based search with surrounding messages
+
+- **Developer Tools**
+  - Git analysis (unpushed commits, uncommitted changes)
+  - VS Code workspace monitoring and analysis
+  - Time utilities with proper time zone handling
+  - Conversation analyzer for extracting key information
+
+- **Enhanced Integration**
+  - External Advice feature for sending recommendations to VS Code
+  - Active Conversations feature for enhanced Claude Desktop integration
+  - Crash Recovery feature for recovering context from crashed conversations
+  - Crash Reports Directory for storing and managing recovered conversations
 
 ## Installation
 
-The server is already installed and configured. If you need to reinstall or update it, follow these steps:
+### Prerequisites
 
-1. Ensure the server files are in the correct location:
-   ```
-   /Users/ant/Cline-Chat-Reader/
+- Node.js 18.0.0 or higher
+- Claude Desktop application
+- VS Code with Cline or Cline Ultra extension
+
+### Setup
+
+1. Clone this repository:
+   ```bash
+   git clone https://github.com/anthonyjj89/cline-mcp-tools.git
+   cd cline-mcp-tools
    ```
 
-2. Make sure the Claude Desktop configuration file is updated:
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Build the project:
+   ```bash
+   npm run build
+   ```
+
+4. Configure Claude Desktop to use this MCP server by adding the following to your Claude Desktop configuration file:
+
    ```json
-   "cline-chat-reader": {
-     "command": "node",
-     "args": [
-       "/Users/ant/Cline-Chat-Reader/build/index.js"
-     ],
-     "disabled": false,
-     "autoApprove": []
+   "mcpServers": {
+     "cline-chat-reader": {
+       "command": "node",
+       "args": [
+         "/path/to/cline-mcp-tools/build/index.js"
+       ],
+       "disabled": false,
+       "autoApprove": []
+     }
    }
    ```
 
-3. Restart Claude Desktop to apply the changes.
+   Replace `/path/to/cline-mcp-tools` with the actual path where you cloned the repository.
+
+5. Restart Claude Desktop to apply the changes.
 
 ## Verification
 
 You can verify that the server is working correctly by running the verification script:
 
 ```bash
-cd /Users/ant/Cline-Chat-Reader
-./tests/test-claude-integration.js
+npm run test:integration
 ```
 
 This script will check:
@@ -67,33 +95,35 @@ The server includes comprehensive test scripts to ensure all features work corre
 Run the automated test suite to verify all features:
 
 ```bash
-cd /Users/ant/Cline-Chat-Reader
-./tests/test-tools.js
+npm run test:all
 ```
 
 This will test all tools including:
-- list_recent_chats
+- list_recent_tasks
 - get_last_n_messages
 - search_conversations
-- search_by_context (new context search feature)
-- get_chat_by_id
+- search_by_context
+- get_task_by_id
 - get_conversation_summary
 - find_code_discussions
+- git analysis tools
+- time utilities
+- crash recovery features
 
-### Testing with Claude Desktop
+### Testing Individual Features
 
-To test the integration with Claude Desktop:
+You can also test specific features:
 
 ```bash
-cd /Users/ant/Cline-Chat-Reader
-./tests/test-claude-integration.js
-```
+# Test Git analyzer
+npm run test:git
 
-This script will:
-1. Verify the MCP server module
-2. Test the server startup
-3. Check the connection to Claude Desktop
-4. Provide example commands for testing the new context search feature
+# Test crash recovery
+npm run test:crash-recovery
+
+# Test examples
+npm run examples
+```
 
 ## New Features
 
