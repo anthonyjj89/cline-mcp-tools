@@ -33,7 +33,7 @@ A Model Context Protocol (MCP) server that enables Claude Desktop to access, sea
 
 - Node.js 18.0.0 or higher
 - Claude Desktop application
-- VS Code with Cline or Cline Ultra extension
+- VS Code with Cline extension
 
 ### Setup
 
@@ -132,13 +132,13 @@ npm run examples
 The Active Conversations feature allows users to mark specific VS Code conversations as "Active A" or "Active B", making it easier for Claude Desktop to find and interact with those conversations through the MCP server.
 
 #### Key Benefits:
-- Improved integration between Claude Desktop and Cline Ultra
+- Improved integration between Claude Desktop and Cline
 - User control over which conversations to interact with
 - Support for two active conversations (A and B) for working with multiple contexts
 - Graceful fallbacks when active conversations aren't available
 
 #### Using Active Conversations:
-- Users mark conversations as "Active A" or "Active B" by clicking the waving hand icon in Cline Ultra
+- Users mark conversations as "Active A" or "Active B" by clicking the waving hand icon in Cline
 - Most conversation-related tools now support omitting the `task_id` parameter to automatically use the active conversation
 - Special placeholder values `ACTIVE_A` or `ACTIVE_B` can be used to explicitly request a specific active conversation
 - The `send_external_advice` tool supports the `active_label` parameter to target an active conversation
@@ -153,11 +153,11 @@ The Crash Recovery feature provides a way to recover context from crashed or cor
 - Extract and analyze content from corrupted conversation files
 - Generate a summary of the conversation's main topics and context
 - Save the recovered context to a dedicated crash reports directory
-- View and manage crash reports through the Cline Ultra extension UI
+- View and manage crash reports through the Cline extension UI
 
 #### Using Crash Recovery:
 - From Claude Desktop: Use the "Recover Crashed Chat" option in the menu
-- From VS Code (Cline Ultra): Use the "Recover Crashed Conversation" command from the command palette
+- From VS Code (Cline): Use the "Recover Crashed Conversation" command from the command palette
 - Using the MCP Tool: Use the `recover_crashed_chat` tool programmatically
 
 For more details, see [Crash Recovery Documentation](docs/features/crash-recovery.md).
@@ -175,10 +175,10 @@ The External Advice feature allows Claude Desktop to send advice or recommendati
 #### Using External Advice:
 - Claude Desktop uses the `send_external_advice` MCP tool to create an advice notification
 - The advice is stored as a JSON file in the `external-advice` directory within the conversation folder
-- Cline Ultra displays a bell icon with a badge to indicate new notifications
+- Cline displays a bell icon with a badge to indicate new notifications
 - Users can view and interact with notifications directly in VS Code
 
-**Note**: The External Advice feature only works with the Cline Ultra VS Code extension, not with the standard Cline extension.
+**Note**: The External Advice feature works with the Cline VS Code extension.
 
 For more details, see [External Advice Documentation](docs/features/external-advice.md).
 
@@ -267,7 +267,7 @@ Key files:
 ### v0.5.3 (March 25, 2025)
 - Added Crash Reports Directory feature for storing recovered conversations
 - New `save_to_crashreports` parameter in `recover_crashed_chat` tool
-- Automatic creation of crash reports directories in Cline Ultra
+- Automatic creation of crash reports directories in Cline
 - Crash report JSON format for easy access and management
 
 ### v0.5.2 (March 25, 2025)
@@ -278,7 +278,7 @@ Key files:
 - Active files identification based on conversation context
 
 ### v0.5.1 (March 25, 2025)
-- Folder-based approach for dismissed notifications in Cline Ultra
+- Folder-based approach for dismissed notifications in Cline
 - New `Dismissed` subdirectory within each task's external-advice directory
 - Support for moving notifications between directories when dismissed/restored
 
