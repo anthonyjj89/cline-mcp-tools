@@ -5,7 +5,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { analyzeConversation } from '../../../../build/utils/conversation-analyzer-simple.js';
+import { analyzeConversation } from '../../../build/utils/conversation-analyzer-simple.js';
 
 // ANSI color codes for terminal output
 const colors = {

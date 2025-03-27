@@ -10,8 +10,8 @@
 
 import fs from 'fs-extra';
 import path from 'path';
-import { listChats } from '../Cline-Chat-Reader/build/services/chat-service.js';
-import { getApiConversationFilePath, getUiMessagesFilePath } from '../Cline-Chat-Reader/build/utils/paths-chat.js';
+import { listChats } from '../../../build/services/chat-service.js';
+import { getApiConversationFilePath, getUiMessagesFilePath } from '../../../build/utils/paths-chat.js';
 
 // Get the VS Code chats directory
 function getVSCodeChatsDirectory() {

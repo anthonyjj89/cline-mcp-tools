@@ -3,7 +3,7 @@
  * Demonstrates the time utilities in action
  */
 
-import { formatTimestamps, formatHumanReadable, getCurrentTime, getTimeDifference } from './build/utils/time-utils.js';
+import { formatTimestamps, formatHumanReadable, getCurrentTime, getTimeDifference } from '../../../build/utils/time-utils.js';
 
 // Test formatTimestamps
 console.log('\n=== Testing formatTimestamps ===');

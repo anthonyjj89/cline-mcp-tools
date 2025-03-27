@@ -6,8 +6,8 @@
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { getVSCodeTasksDirectory } from './build/utils/paths.js';
-import { listTasks } from './build/services/index.js';
+import { getVSCodeTasksDirectory } from '../../../build/utils/paths.js';
+import { listTasks } from '../../../build/services/index.js';
 
 // ANSI color codes for terminal output
 const colors = {

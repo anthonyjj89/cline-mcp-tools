@@ -4,7 +4,7 @@
  * and provides detailed output about the detected workspaces.
  */
 
-import { getVSCodeWorkspaces } from './build/utils/vscode-tracker.js';
+import { getVSCodeWorkspaces } from '../../../build/utils/vscode-tracker.js';
 import { execSync } from 'child_process';
 import fs from 'fs-extra';
 import path from 'path';
