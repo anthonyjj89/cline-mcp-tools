@@ -14,31 +14,20 @@ import os from 'os';
 // Function to get active tasks
 async function getActiveTasks(label) {
   try {
-    // Look for active_tasks.json file in both standard and Ultra paths
+    // Look for active_tasks.json file in standard path
     const homedir = os.homedir();
-    const ultraPath = path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'active_tasks.json');
     const standardPath = path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'active_tasks.json');
     
-    // Try ultra path first, then standard path
+    // Try to read the active tasks file
     let activeTasksData = null;
     
-    if (await fs.pathExists(ultraPath)) {
-      try {
-        const content = await fs.readFile(ultraPath, 'utf8');
-        activeTasksData = JSON.parse(content);
-        console.log(`Found active tasks file at ${ultraPath}`);
-      } catch (error) {
-        console.error('Error reading ultra active tasks file:', error);
-      }
-    }
-    
-    if (!activeTasksData && await fs.pathExists(standardPath)) {
+    if (await fs.pathExists(standardPath)) {
       try {
         const content = await fs.readFile(standardPath, 'utf8');
         activeTasksData = JSON.parse(content);
         console.log(`Found active tasks file at ${standardPath}`);
       } catch (error) {
-        console.error('Error reading standard active tasks file:', error);
+        console.error('Error reading active tasks file:', error);
       }
     }
     
@@ -84,7 +73,7 @@ async function getActiveTasks(label) {
 // Create test active_tasks.json file for testing
 async function setupTestFile() {
   const homedir = os.homedir();
-  const ultraPath = path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'active_tasks.json');
+  const standardPath = path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'active_tasks.json');
   
   // Create test data
   const testData = {
@@ -103,13 +92,13 @@ async function setupTestFile() {
   };
   
   // Ensure directories exist
-  await fs.ensureDir(path.dirname(ultraPath));
+  await fs.ensureDir(path.dirname(standardPath));
   
-  // Write test data to Ultra path
-  await fs.writeJson(ultraPath, testData, { spaces: 2 });
-  console.log(`Created test active_tasks.json at ${ultraPath}`);
+  // Write test data to standard path
+  await fs.writeJson(standardPath, testData, { spaces: 2 });
+  console.log(`Created test active_tasks.json at ${standardPath}`);
   
-  return ultraPath;
+  return standardPath;
 }
 
 // Clean up test file

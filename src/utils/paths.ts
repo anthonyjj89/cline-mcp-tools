@@ -8,34 +8,28 @@ import path from 'path';
 import fs from 'fs-extra';
 
 /**
- * Get the platform-specific paths to the VS Code extension tasks directories
- * @param taskId Optional task ID to check for existence in either path
- * @returns Array of absolute paths to the VS Code extension tasks directories
+ * Get the platform-specific path to the VS Code extension tasks directory
+ * @param taskId Optional task ID to check for existence
+ * @returns Array containing the absolute path to the VS Code extension tasks directory
  */
 export function getVSCodeTasksDirectory(taskId?: string): string[] {
   const homedir = os.homedir();
   
-  // Define paths for both extensions based on platform
-  const getPaths = () => {
+  // Define path for standard Cline extension based on platform
+  const getPath = () => {
     switch (process.platform) {
       case 'win32':
         return [
-          // Cline Ultra path
-          path.join(process.env.APPDATA || '', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'tasks'),
           // Standard Cline path
           path.join(process.env.APPDATA || '', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'tasks')
         ];
       case 'darwin':
         return [
-          // Cline Ultra path
-          path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'tasks'),
           // Standard Cline path
           path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'tasks')
         ];
       case 'linux':
         return [
-          // Cline Ultra path
-          path.join(homedir, '.config', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'tasks'),
           // Standard Cline path
           path.join(homedir, '.config', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'tasks')
         ];
@@ -44,13 +38,7 @@ export function getVSCodeTasksDirectory(taskId?: string): string[] {
     }
   };
   
-  const possiblePaths = getPaths();
-  
-  // Always return all paths that exist
-  const existingPaths = possiblePaths.filter(p => fs.existsSync(p));
-  
-  // If no paths exist, return all possible paths (for creation purposes)
-  return existingPaths.length > 0 ? existingPaths : possiblePaths;
+  return getPath();
 }
 
 /**
@@ -179,36 +167,36 @@ export function formatFileSize(bytes: number): string {
 }
 
 /**
- * Get the platform-specific paths to the VS Code extension crash reports directories
- * @returns Array of absolute paths to the VS Code extension crash reports directories
+ * Get the platform-specific path to the VS Code extension crash reports directory
+ * @returns Array containing the absolute path to the VS Code extension crash reports directory
  */
 export function getCrashReportsDirectories(): string[] {
   const homedir = os.homedir();
   
-  // Define paths for both extensions based on platform
-  const getPaths = () => {
+  // Define path for standard Cline extension based on platform
+  const getPath = () => {
     switch (process.platform) {
       case 'win32':
         return [
-          // Cline Ultra path only (crash reports are only supported in Ultra)
-          path.join(process.env.APPDATA || '', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'crashReports')
+          // Standard Cline path
+          path.join(process.env.APPDATA || '', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'crashReports')
         ];
       case 'darwin':
         return [
-          // Cline Ultra path only (crash reports are only supported in Ultra)
-          path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'crashReports')
+          // Standard Cline path
+          path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'crashReports')
         ];
       case 'linux':
         return [
-          // Cline Ultra path only (crash reports are only supported in Ultra)
-          path.join(homedir, '.config', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'crashReports')
+          // Standard Cline path
+          path.join(homedir, '.config', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'crashReports')
         ];
       default:
         throw new Error(`Unsupported platform: ${process.platform}`);
     }
   };
   
-  return getPaths();
+  return getPath();
 }
 
 /**
@@ -228,12 +216,12 @@ export function getDismissedCrashReportsDirectory(): string {
 }
 
 /**
- * Check if a path is within the Ultra extension
+ * Check if a path is within the standard Cline extension
  * @param dirPath Directory path to check
- * @returns True if the path is within the Ultra extension, false otherwise
+ * @returns True if the path is within the standard Cline extension, false otherwise
  */
-export function isUltraExtensionPath(dirPath: string): boolean {
-  return dirPath.includes('custom.claude-dev-ultra');
+export function isStandardClineExtensionPath(dirPath: string): boolean {
+  return dirPath.includes('saoudrizwan.claude-dev');
 }
 
 /**

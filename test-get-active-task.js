@@ -13,10 +13,9 @@ const os = require('os');
 // Path to the MCP server
 const SERVER_PATH = path.join(__dirname, 'build', 'index.js');
 
-// Create test active_tasks.json files for testing
+// Create test active_tasks.json file for testing
 async function setupTestFiles() {
   const homedir = os.homedir();
-  const ultraPath = path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'active_tasks.json');
   const standardPath = path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'active_tasks.json');
   
   // Create test data
@@ -36,20 +35,20 @@ async function setupTestFiles() {
   };
   
   // Ensure directories exist
-  await fs.ensureDir(path.dirname(ultraPath));
+  await fs.ensureDir(path.dirname(standardPath));
   
-  // Write test data to Ultra path
-  await fs.writeJson(ultraPath, testData, { spaces: 2 });
-  console.log(`Created test active_tasks.json at ${ultraPath}`);
+  // Write test data to standard path
+  await fs.writeJson(standardPath, testData, { spaces: 2 });
+  console.log(`Created test active_tasks.json at ${standardPath}`);
   
-  return { ultraPath, standardPath };
+  return { standardPath };
 }
 
 // Clean up test files
 async function cleanupTestFiles(paths) {
   try {
-    await fs.remove(paths.ultraPath);
-    console.log(`Removed test file: ${paths.ultraPath}`);
+    await fs.remove(paths.standardPath);
+    console.log(`Removed test file: ${paths.standardPath}`);
   } catch (err) {
     console.error(`Error removing test file: ${err.message}`);
   }
