@@ -12,8 +12,12 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",
+    "chalk": "^5.4.1",
     "chokidar": "^4.0.3",
+    "cli-table3": "^0.6.5",
+    "date-fns": "^4.1.0",
     "fs-extra": "^11.3.0",
+    "jsonc-parser": "^3.3.1",
     "jsonpath": "^1.1.1",
     "node-fetch": "^3.3.0",
     "os": "^0.1.2",
@@ -21,6 +25,7 @@
     "simple-git": "^3.27.0",
     "stream-chain": "^3.4.0",
     "stream-json": "^1.9.1",
+    "yargs": "^17.7.2",
     "zod": "^3.24.2",
     "zod-to-json-schema": "^3.24.5"
   },

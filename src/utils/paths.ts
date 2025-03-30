@@ -6,6 +6,7 @@
 import os from 'os';
 import path from 'path';
 import fs from 'fs-extra';
+import { config } from '../config.js';
 
 /**
  * Get the platform-specific path to the VS Code extension tasks directory
@@ -222,6 +223,64 @@ export function getDismissedCrashReportsDirectory(): string {
  */
 export function isStandardClineExtensionPath(dirPath: string): boolean {
   return dirPath.includes('saoudrizwan.claude-dev');
+}
+
+/**
+ * Read the active tasks file for standard Cline
+ * @returns Promise resolving to the active tasks data
+ */
+export async function getActiveTasksData(): Promise<{ 
+  activeTasks: Array<{
+    id: string;
+    label: string;
+    lastActivated: number;
+    source?: string;
+    extensionType?: string;
+  }> 
+}> {
+  try {
+    if (await fs.pathExists(config.paths.activeTasksFile)) {
+      const content = await fs.readFile(config.paths.activeTasksFile, 'utf8');
+      return JSON.parse(content);
+    }
+  } catch (error) {
+    console.error('Error reading active tasks file:', error);
+  }
+  
+  return { activeTasks: [] };
+}
+
+/**
+ * Get active task by ID or label
+ * @param taskId Optional task ID to find
+ * @param label Optional label (A, B, C, D) to find
+ * @returns The active task if found, undefined otherwise
+ */
+export async function getActiveTask(taskId?: string, label?: string): Promise<{
+  id: string;
+  label: string;
+  lastActivated: number;
+  source?: string;
+  extensionType?: string;
+} | undefined> {
+  const activeTasksData = await getActiveTasksData();
+  
+  if (!activeTasksData.activeTasks || activeTasksData.activeTasks.length === 0) {
+    return undefined;
+  }
+  
+  // If taskId is provided, find by ID
+  if (taskId) {
+    return activeTasksData.activeTasks.find(task => task.id === taskId);
+  }
+  
+  // If label is provided, find by label
+  if (label) {
+    return activeTasksData.activeTasks.find(task => task.label === label);
+  }
+  
+  // If neither is provided, return the most recently activated task
+  return activeTasksData.activeTasks.sort((a, b) => b.lastActivated - a.lastActivated)[0];
 }
 
 /**

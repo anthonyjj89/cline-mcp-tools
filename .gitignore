@@ -43,3 +43,13 @@ yarn-error.log*
 # Backup files
 *.backup
 *.bak
+
+MANAGEMENT-REPORT.md
+
+# Diagnostic scripts
+test-active-tasks.js
+test-active-tasks-fixed.js
+build-mcp.js
+MCP-FIXES-README.md
+monitor-mcp-logs.js
+MCP-LOG-MONITOR-README.md

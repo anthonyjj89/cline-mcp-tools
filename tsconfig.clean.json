@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "esModuleInterop": true,
+    "outDir": "./build",
+    "rootDir": "./src",
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "src/mcp-server.ts",
+    "src/utils/active-task.ts",
+    "src/utils/message-utils.ts",
+    "src/utils/file-utils.ts",
+    "src/config.ts",
+    "src/models/task.ts"
+  ],
+  "exclude": ["node_modules", "build"]
+}
