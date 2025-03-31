@@ -79,12 +79,37 @@ Parameters:
 
 ### send_external_advice
 
-Sends advice to another conversation.
+Sends advice to another conversation. Supports both simple and structured formats.
 
-Parameters:
-- `target_task_id`: Task ID of the target conversation.
-- `message`: The advice message to send.
-- `source_task_id` (optional): Task ID of the source conversation.
+**Simple Format (backward compatible):**
+```json
+{
+  "target_task_id": "1234567890",
+  "message": "Your advice here",
+  "source_task_id": "optional-source-id"
+}
+```
+
+**Structured Format:**
+```json
+{
+  "target_task_id": "1234567890",
+  "title": "Message Summary",
+  "content": "Detailed message content",
+  "type": "info|warning|error",
+  "priority": "low|medium|high", 
+  "source_task_id": "optional-source-id"
+}
+```
+
+**Required Parameters:**
+- `target_task_id`: Task ID of the target conversation
+- Either `message` (simple format) or both `title` and `content` (structured format)
+
+**Optional Parameters:**
+- `source_task_id`: Task ID of the source conversation
+- `type`: Message type (structured format only)
+- `priority`: Message priority (structured format only)
 
 ## Error Handling
 
