@@ -5,6 +5,14 @@ All notable changes to the Cline Chat Reader MCP Server will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2025-03-31
+
+### Changed
+- Enhanced .gitignore with additional patterns for non-public-facing files
+- Added patterns for local development files, temporary files, and debug logs
+- Added patterns for user-specific configuration files
+- Added patterns for source code backups
+
 ## [0.6.1] - 2025-03-31
 
 ### Added
