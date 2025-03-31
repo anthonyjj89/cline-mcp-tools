@@ -94,11 +94,21 @@ const GetActiveTaskSchema = z.object({
 /**
  * Schema for send_external_advice tool
  */
-const SendExternalAdviceSchema = z.object({
-  target_task_id: z.string().describe('Task ID of the target conversation'),
-  message: z.string().min(1).max(10000).describe('The advice message to send'),
-  source_task_id: z.string().optional().describe('Task ID of the source conversation')
-});
+const SendExternalAdviceSchema = z.union([
+  z.object({
+    target_task_id: z.string().describe('Task ID of the target conversation'),
+    message: z.string().min(1).max(10000).describe('The advice message to send'),
+    source_task_id: z.string().optional().describe('Task ID of the source conversation')
+  }),
+  z.object({
+    target_task_id: z.string().describe('Task ID of the target conversation'),
+    title: z.string().min(1).max(200).describe('Message title/summary'),
+    content: z.string().min(1).max(10000).describe('The advice message content'),
+    type: z.enum(['info', 'warning', 'error']).default('info').describe('Message type'),
+    priority: z.enum(['low', 'medium', 'high']).default('medium').describe('Message priority'),
+    source_task_id: z.string().optional().describe('Task ID of the source conversation')
+  })
+]);
 
 /**
  * Handle read_last_messages tool call
@@ -455,8 +465,29 @@ async function handleGetActiveTask(args: unknown): Promise<any> {
  */
 async function handleSendExternalAdvice(args: unknown): Promise<any> {
   try {
+    // Type definitions for message formats
+    type SimpleMessage = {
+      message: string;
+      target_task_id: string;
+      source_task_id?: string;
+    };
+
+    type StructuredMessage = {
+      content: string;
+      title: string;
+      type: 'info' | 'warning' | 'error';
+      priority: 'low' | 'medium' | 'high';
+      target_task_id: string;
+      source_task_id?: string;
+    };
+
     // Parse and validate arguments
-    const { target_task_id, message, source_task_id } = SendExternalAdviceSchema.parse(args);
+    const parsedArgs = SendExternalAdviceSchema.parse(args) as SimpleMessage | StructuredMessage;
+    const { target_task_id, source_task_id } = parsedArgs;
+    
+    // Handle both message formats
+    const isSimpleMessage = (msg: any): msg is SimpleMessage => 'message' in msg;
+    const message = isSimpleMessage(parsedArgs) ? parsedArgs.message : parsedArgs.content;
     
     // Validate target task exists with timeout
     const targetTaskExists = await Promise.race([
@@ -484,14 +515,25 @@ async function handleSendExternalAdvice(args: unknown): Promise<any> {
     // Generate advice ID
     const adviceId = `advice-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`;
     
-    // Create advice object
-    const advice = {
-      id: adviceId,
-      content: message,
-      source_task_id: source_task_id,
-      timestamp: Date.now(),
-      read: false
-    };
+    // Create advice object - handle both formats
+    const advice = isSimpleMessage(parsedArgs)
+      ? {
+          id: adviceId,
+          content: parsedArgs.message,
+          source_task_id: source_task_id,
+          timestamp: Date.now(),
+          read: false
+        }
+      : {
+          id: adviceId,
+          content: parsedArgs.content,
+          title: parsedArgs.title,
+          type: parsedArgs.type,
+          priority: parsedArgs.priority,
+          source_task_id: source_task_id,
+          timestamp: Date.now(),
+          read: false
+        };
     
     // Log the target task directory path
     const tasksDir = await getTasksDirectoryForTask(target_task_id);
@@ -654,24 +696,60 @@ export async function initMcpServer(): Promise<Server> {
         },
         {
           name: config.tools.sendExternalAdvice,
-          description: 'Send advice to another conversation',
+          description: 'Send advice to another conversation (supports both simple and structured formats)',
           inputSchema: {
-            type: 'object',
-            properties: {
-              target_task_id: {
-                type: 'string',
-                description: 'Task ID of the target conversation'
+            oneOf: [
+              {
+                type: 'object',
+                properties: {
+                  target_task_id: {
+                    type: 'string',
+                    description: 'Task ID of the target conversation'
+                  },
+                  message: {
+                    type: 'string',
+                    description: 'The advice message to send'
+                  },
+                  source_task_id: {
+                    type: 'string',
+                    description: 'Task ID of the source conversation'
+                  }
+                },
+                required: ['target_task_id', 'message']
               },
-              message: {
-                type: 'string',
-                description: 'The advice message to send'
-              },
-              source_task_id: {
-                type: 'string',
-                description: 'Task ID of the source conversation'
+              {
+                type: 'object',
+                properties: {
+                  target_task_id: {
+                    type: 'string',
+                    description: 'Task ID of the target conversation'
+                  },
+                  title: {
+                    type: 'string',
+                    description: 'Message title/summary'
+                  },
+                  content: {
+                    type: 'string',
+                    description: 'The advice message content'
+                  },
+                  type: {
+                    type: 'string',
+                    enum: ['info', 'warning', 'error'],
+                    description: 'Message type'
+                  },
+                  priority: {
+                    type: 'string',
+                    enum: ['low', 'medium', 'high'],
+                    description: 'Message priority'
+                  },
+                  source_task_id: {
+                    type: 'string',
+                    description: 'Task ID of the source conversation'
+                  }
+                },
+                required: ['target_task_id', 'title', 'content']
               }
-            },
-            required: ['target_task_id', 'message']
+            ]
           }
         }
       ]
