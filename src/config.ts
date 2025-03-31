@@ -87,7 +87,7 @@ export function getActiveTasksFallbackPaths(): string[] {
 }
 
 export const config = {
-  version: '2.0.0',
+  version: '0.6.1',
   
   // Paths configuration
   paths: getPlatformPaths(),

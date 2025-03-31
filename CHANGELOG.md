@@ -5,6 +5,17 @@ All notable changes to the Cline Chat Reader MCP Server will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2025-03-31
+
+### Added
+- Support for structured message format in send_external_advice tool
+- Improved README documentation with clear examples
+
+### Changed
+- Better type safety for message handling
+- Enhanced error messages and validation
+- Updated version to maintain consistency across package.json and config.ts
+
 ## [0.6.0] - 2025-03-31
 
 ### Added
@@ -24,15 +35,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implemented message standardization utilities
 - Added timeout handling for file operations
 - Created comprehensive error code system
-
-## [0.5.6] - 2025-03-26
-
-### Added
-- Support for sending recovered chat content to active conversations
-- New `active_label` parameter in `recover_crashed_chat` tool
-- Ability to specify which active conversation (A or B) to send recovered content to
-- Test script for demonstrating the active conversation integration
-- New documentation for the crash recovery to active conversations feature
-- Enhanced user flow for recovering from crashed chats
 
 [... rest of existing changelog content remains unchanged ...]
