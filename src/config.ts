@@ -5,30 +5,85 @@
 
 import * as path from 'path';
 import * as os from 'os';
+import * as fs from 'fs';
 
 const homedir = os.homedir();
 
-// Get platform-specific paths
+// Get platform-specific paths with fully resolved absolute paths
 function getPlatformPaths() {
+  // Log current working directory and home directory for debugging
+  console.error(`Current working directory: ${process.cwd()}`);
+  console.error(`Home directory: ${homedir}`);
+  
+  // Get the base path with fully resolved absolute paths
   const basePath = (() => {
     switch (process.platform) {
       case 'win32':
-        return path.join(process.env.APPDATA || '', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev');
+        const winPath = path.resolve(process.env.APPDATA || '', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev');
+        console.error(`Windows absolute path: ${winPath}`);
+        return winPath;
       case 'darwin':
-        return path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev');
+        const macPath = path.resolve(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev');
+        console.error(`macOS absolute path: ${macPath}`);
+        return macPath;
       case 'linux':
-        return path.join(homedir, '.config', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev');
+        const linuxPath = path.resolve(homedir, '.config', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev');
+        console.error(`Linux absolute path: ${linuxPath}`);
+        return linuxPath;
       default:
         console.warn(`Unsupported platform: ${process.platform}, using fallback paths`);
-        return path.join(homedir, '.vscode', 'saoudrizwan.claude-dev');
+        const fallbackPath = path.resolve(homedir, '.vscode', 'saoudrizwan.claude-dev');
+        console.error(`Fallback absolute path: ${fallbackPath}`);
+        return fallbackPath;
     }
   })();
-
+  
+  // Create fully resolved absolute paths
+  const activeTasksFile = path.resolve(basePath, 'active_tasks.json');
+  const standardTasksDir = path.resolve(basePath, 'tasks');
+  const crashReportsDir = path.resolve(basePath, 'crashReports');
+  
+  // Log the paths for debugging
+  console.error(`Active tasks file path: ${activeTasksFile}`);
+  console.error(`Standard tasks directory: ${standardTasksDir}`);
+  console.error(`Crash reports directory: ${crashReportsDir}`);
+  
+  // Check if the paths exist
+  console.error(`Active tasks file exists: ${fs.existsSync(activeTasksFile)}`);
+  console.error(`Standard tasks directory exists: ${fs.existsSync(standardTasksDir)}`);
+  console.error(`Crash reports directory exists: ${fs.existsSync(crashReportsDir)}`);
+  
   return {
-    activeTasksFile: path.join(basePath, 'active_tasks.json'),
-    standardTasksDir: path.join(basePath, 'tasks'),
-    crashReportsDir: path.join(basePath, 'crashReports')
+    activeTasksFile,
+    standardTasksDir,
+    crashReportsDir
   };
+}
+
+// Define fallback paths for active tasks file
+export function getActiveTasksFallbackPaths(): string[] {
+  const paths = [];
+  
+  // Primary path from platform-specific configuration
+  paths.push(config.paths.activeTasksFile);
+  
+  // Fallback 1: Use OS home directory with explicit path
+  const fallbackPath1 = path.resolve(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'active_tasks.json');
+  paths.push(fallbackPath1);
+  
+  // Fallback 2: Check relative to current working directory
+  const fallbackPath2 = path.resolve(process.cwd(), 'active_tasks.json');
+  paths.push(fallbackPath2);
+  
+  // Fallback 3: Common locations
+  paths.push(path.resolve('/Users/ant/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/active_tasks.json'));
+  paths.push(path.resolve('/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/active_tasks.json'));
+  
+  // Log all fallback paths
+  console.error('Active tasks fallback paths:');
+  paths.forEach((p, i) => console.error(`  ${i}: ${p}`));
+  
+  return paths;
 }
 
 export const config = {

@@ -153,7 +153,7 @@ export async function getTaskSummary(tasksDir, taskId) {
             return summary;
         }
         // Get a sample of the conversation (first and last few messages)
-        const previewMessages = await getConversationHistory(tasksDir, taskId, { limit: 10 });
+        const previewMessages = await getConversationHistory(taskId, { limit: 10 });
         summary.previewMessages = previewMessages;
         if (previewMessages.length > 0) {
             summary.sampleFirst = previewMessages[0];
@@ -175,12 +175,14 @@ export async function getTaskSummary(tasksDir, taskId) {
         summary.totalMessages = totalMessages;
         // Count message types by scanning the file
         // We'll implement this using our conversation service to filter by role
-        const humanMessages = await getConversationHistory(tasksDir, taskId, {
-            limit: Number.MAX_SAFE_INTEGER
-        }, (message) => message.role === 'human');
-        const assistantMessages = await getConversationHistory(tasksDir, taskId, {
-            limit: Number.MAX_SAFE_INTEGER
-        }, (message) => message.role === 'assistant');
+        const humanMessages = await getConversationHistory(taskId, {
+            limit: Number.MAX_SAFE_INTEGER,
+            filterFn: (message) => message.role === 'human'
+        });
+        const assistantMessages = await getConversationHistory(taskId, {
+            limit: Number.MAX_SAFE_INTEGER,
+            filterFn: (message) => message.role === 'assistant'
+        });
         summary.totalHumanMessages = humanMessages.length;
         summary.totalAssistantMessages = assistantMessages.length;
         return summary;

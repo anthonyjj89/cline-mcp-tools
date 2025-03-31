@@ -8,7 +8,6 @@ import path from 'path';
 import fs from 'fs-extra';
 import { getActiveTasksFallbackPaths } from '../config.js';
 import { logError, logWarning, logInfo, logDebug } from './diagnostic-logger.js';
-import { parseJsonWithRepair } from './json-repair.js';
 /**
  * Get the platform-specific path to the VS Code extension tasks directory
  * @param taskId Optional task ID to check for existence
@@ -309,9 +308,9 @@ export async function getActiveTasksData() {
                     ? content.substring(0, 200) + '... [truncated]'
                     : content;
                 logDebug(`File content (truncated): ${truncated}`);
-                // Parse the JSON with repair fallback
-                const parsed = parseJsonWithRepair(content);
-                if (parsed) {
+                try {
+                    // Parse the JSON
+                    const parsed = JSON.parse(content);
                     logInfo(`Successfully parsed active tasks JSON from ${activeTasksPath}`);
                     logDebug(`Active tasks count: ${parsed.activeTasks?.length || 0}`);
                     if (parsed.activeTasks && parsed.activeTasks.length > 0) {
@@ -319,8 +318,8 @@ export async function getActiveTasksData() {
                     }
                     return parsed;
                 }
-                else {
-                    logError(`Failed to parse active tasks JSON even after repair from ${activeTasksPath}`);
+                catch (parseError) {
+                    logWarning(`Error parsing active tasks JSON from ${activeTasksPath}`, parseError);
                 }
             }
         }

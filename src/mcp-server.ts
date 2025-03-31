@@ -9,6 +9,15 @@
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { 
+  initDiagnosticLogger, 
+  setLogLevel, 
+  LogLevel, 
+  logError, 
+  logWarning, 
+  logInfo, 
+  logDebug 
+} from './utils/diagnostic-logger.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
@@ -20,19 +29,19 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import path from 'path';
+import fs from 'fs-extra';
 import { config } from './config.js';
 import { Message } from './models/task.js';
+import { getTasksDirectoryForTask } from './utils/paths.js';
 import { 
   getActiveTaskWithCache, 
   getAllActiveTasksWithCache,
   getApiConversationFilePath,
   validateTaskExists,
   writeAdviceToTask,
-  logError,
-  logWarning,
-  logInfo,
   ActiveTaskErrorCode
-} from './utils/active-task-fix.js';
+} from './utils/active-task-fixed.js';
 import { 
   readConversationMessages,
   readConversationMessagesWithTimeout,
@@ -40,7 +49,8 @@ import {
 } from './utils/file-utils.js';
 import {
   standardizeMessageContent,
-  MessageErrorCode
+  MessageErrorCode,
+  parseConversationContent
 } from './utils/message-utils.js';
 
 /**
@@ -117,83 +127,138 @@ async function handleReadLastMessages(args: unknown): Promise<any> {
         isError: true,
       };
     }
+
+    const uiFilePath = path.join(path.dirname(await getApiConversationFilePath(activeTask.id)), 'ui_messages.json');
+    let messages: Message[] = [];
     
-    // Get the API conversation file path
-    const apiFilePath = await getApiConversationFilePath(activeTask.id);
-    
-    // Read messages with fixed limit of 20
-    const messages = await readConversationMessagesWithTimeout(
-      apiFilePath, 
-      config.messages.defaultLimit,
-      config.errorHandling.timeout
-    );
-    
-    // If no messages found, return error
-    if (messages.length === 0) {
+    try {
+      if (!await fs.pathExists(uiFilePath)) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                error_code: FileErrorCode.FILE_NOT_FOUND,
+                error: `UI messages file not found for task ${activeTask.id}`,
+                details: {
+                  attempted_path: uiFilePath,
+                  recommendation: "The conversation may not exist or may be corrupted."
+                }
+              }, null, 2),
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const uiContent = await fs.readFile(uiFilePath, 'utf8');
+      messages = parseConversationContent(uiContent, config.messages.defaultLimit, true);
+
+      // If no messages found, return error
+      if (messages.length === 0) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                error_code: FileErrorCode.FILE_NOT_FOUND,
+                error: `No messages found in UI file for task ${activeTask.id}`,
+                details: {
+                  attempted_path: uiFilePath,
+                  file_exists: await fs.pathExists(uiFilePath),
+                  file_size: (await fs.stat(uiFilePath)).size,
+                  recommendation: "The UI messages file exists but contains no messages."
+                }
+              }, null, 2),
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Transform messages for Claude Desktop compatibility
+      const transformedMessages = standardizeMessageContent(messages);
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              task_id: activeTask.id,
+              is_active_task: true,
+              active_label: activeTask.label,
+              message_count: transformedMessages.length,
+              messages: transformedMessages
+            }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      const errorDetails: any = {
+        attempted_path: uiFilePath,
+        directory_exists: await fs.pathExists(path.dirname(uiFilePath)),
+        raw_error: (error as Error).message
+      };
+      
+      try {
+        errorDetails.file_permissions = (await fs.stat(uiFilePath)).mode.toString(8);
+      } catch (statError) {
+        errorDetails.file_permissions = "unknown";
+      }
+      
       return {
         content: [
           {
             type: 'text',
             text: JSON.stringify({
               error_code: FileErrorCode.FILE_NOT_FOUND,
-              error: `No messages found for task ${activeTask.id}.`,
-              recommendation: "The conversation may be empty or the file may be corrupted."
+              error: `Failed to read messages for task ${activeTask.id}`,
+              details: {
+                ...errorDetails,
+                recommendations: [
+                  "Verify the file exists at the expected path", 
+                  "Check file permissions and ownership",
+                  "Ensure the file is valid JSON format"
+                ]
+              }
             }, null, 2),
           },
         ],
         isError: true,
       };
     }
-    
-    // Transform messages for Claude Desktop compatibility
-    const transformedMessages = standardizeMessageContent(messages);
-    
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            task_id: activeTask.id,
-            is_active_task: true,
-            active_label: activeTask.label,
-            message_count: transformedMessages.length,
-            messages: transformedMessages
-          }, null, 2),
-        },
-      ],
-    };
-  } catch (error) {
-    // Handle errors with proper error codes
-    if (error instanceof z.ZodError) {
-      logError(ServerErrorCode.INVALID_ARGUMENTS, `Invalid arguments for read_last_messages: ${error.message}`);
+    } catch (error) {
+      // Handle outer errors (argument parsing, etc)
+      if (error instanceof z.ZodError) {
+        logError(ServerErrorCode.INVALID_ARGUMENTS, `Invalid arguments for read_last_messages: ${error.message}`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                error_code: ServerErrorCode.INVALID_ARGUMENTS,
+                error: `Invalid arguments: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`
+              }, null, 2),
+            },
+          ],
+          isError: true,
+        };
+      }
+      
+      logError(ServerErrorCode.INTERNAL_ERROR, `Error in read_last_messages: ${(error as Error).message}`);
       return {
         content: [
           {
             type: 'text',
             text: JSON.stringify({
-              error_code: ServerErrorCode.INVALID_ARGUMENTS,
-              error: `Invalid arguments: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`
+              error_code: ServerErrorCode.INTERNAL_ERROR,
+              error: `Error: ${(error as Error).message}`
             }, null, 2),
           },
         ],
         isError: true,
       };
     }
-    
-    logError(ServerErrorCode.INTERNAL_ERROR, `Error in read_last_messages: ${(error as Error).message}`);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            error_code: ServerErrorCode.INTERNAL_ERROR,
-            error: `Error: ${(error as Error).message}`
-          }, null, 2),
-        },
-      ],
-      isError: true,
-    };
-  }
 }
 
 /**
@@ -224,17 +289,33 @@ async function handleReadLast40Messages(args: unknown): Promise<any> {
       };
     }
     
-    // Get the API conversation file path
-    const apiFilePath = await getApiConversationFilePath(activeTask.id);
+    // Get UI messages file path
+    const uiFilePath = path.join(path.dirname(await getApiConversationFilePath(activeTask.id)), 'ui_messages.json');
     
-    // Read messages with fixed limit of 40
-    const messages = await readConversationMessagesWithTimeout(
-      apiFilePath, 
-      config.messages.extendedLimit,
-      config.errorHandling.timeout
-    );
-    
-    // If no messages found, return error
+    // Check if UI messages file exists
+    if (!await fs.pathExists(uiFilePath)) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              error_code: FileErrorCode.FILE_NOT_FOUND,
+              error: `UI messages file not found for task ${activeTask.id}`,
+              details: {
+                attempted_path: uiFilePath,
+                recommendation: "The conversation may not exist or may be corrupted."
+              }
+            }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // Read and parse UI messages with 40 message limit
+    const uiContent = await fs.readFile(uiFilePath, 'utf8');
+    const messages = parseConversationContent(uiContent, config.messages.extendedLimit, true);
+
     if (messages.length === 0) {
       return {
         content: [
@@ -242,8 +323,12 @@ async function handleReadLast40Messages(args: unknown): Promise<any> {
             type: 'text',
             text: JSON.stringify({
               error_code: FileErrorCode.FILE_NOT_FOUND,
-              error: `No messages found for task ${activeTask.id}.`,
-              recommendation: "The conversation may be empty or the file may be corrupted."
+              error: `No messages found in UI file for task ${activeTask.id}`,
+              details: {
+                attempted_path: uiFilePath,
+                file_size: (await fs.stat(uiFilePath)).size,
+                recommendation: "The conversation file exists but contains no messages."
+              }
             }, null, 2),
           },
         ],
@@ -407,6 +492,11 @@ async function handleSendExternalAdvice(args: unknown): Promise<any> {
       timestamp: Date.now(),
       read: false
     };
+    
+    // Log the target task directory path
+    const tasksDir = await getTasksDirectoryForTask(target_task_id);
+    const taskDir = path.join(tasksDir, target_task_id);
+    logDebug(`[send_external_advice] Writing to task directory: ${taskDir}`);
     
     // Write advice to target task
     await writeAdviceToTask(target_task_id, advice);
@@ -613,7 +703,7 @@ export async function initMcpServer(): Promise<Server> {
           );
       }
     } catch (error) {
-      logError(ServerErrorCode.INTERNAL_ERROR, `Error executing tool ${name}:`, error);
+      logError(`Error executing tool ${name} (${ServerErrorCode.INTERNAL_ERROR}): ${(error as Error).message}`, error);
       
       // Return formatted error
       if (error instanceof McpError) {
@@ -653,6 +743,11 @@ export async function initMcpServer(): Promise<Server> {
  */
 export async function startMcpServer() {
   try {
+    // Initialize diagnostic logger
+    const logLevel = process.env.LOG_LEVEL ? parseInt(process.env.LOG_LEVEL, 10) : LogLevel.INFO;
+    initDiagnosticLogger(logLevel);
+    logInfo(`Starting MCP server with log level ${LogLevel[logLevel]} (${logLevel})`);
+    
     // Initialize MCP server
     const server = await initMcpServer();
     
@@ -674,7 +769,7 @@ export async function startMcpServer() {
       process.exit(0);
     });
   } catch (error) {
-    logError(ServerErrorCode.INTERNAL_ERROR, 'Error starting MCP server:', error);
+    logError(`Error starting MCP server (${ServerErrorCode.INTERNAL_ERROR}): ${(error as Error).message}`, error);
     process.exit(1);
   }
 }

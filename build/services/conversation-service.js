@@ -1,36 +1,41 @@
 /**
  * Conversation service for the Claude Task Reader MCP Server
- * Provides functionality for retrieving and filtering conversation messages
+ * Uses direct paths from active_tasks.json instead of path resolution
  */
 import fs from 'fs-extra';
-import { getApiConversationFilePath, getUiMessagesFilePath, apiConversationFileExists, uiMessagesFileExists } from '../utils/paths.js';
+import { getApiConversationFilePath } from '../utils/paths.js';
 import { streamJsonArray, searchJsonArray } from '../utils/json-streaming.js';
 import { readJsonArray, searchJsonArrayDirect } from '../utils/json-fallback.js';
+import { getActiveTasksDataWithCache } from '../utils/active-task.js';
 /**
  * Get conversation history for a task with filtering options
- * @param tasksDir Path to the VS Code extension tasks directory
  * @param taskId Task ID
  * @param options Filter options (limit, since, search)
  * @param filterFn Optional custom filter function
  * @returns Promise resolving to the filtered conversation messages
  */
-export async function getConversationHistory(tasksDir, taskId, options = {}, filterFn) {
+export async function getConversationHistory(taskId, options = {}, filterFn) {
     try {
-        // Check if conversation file exists
-        if (!await apiConversationFileExists(tasksDir, taskId)) {
-            throw new Error(`Conversation file not found for task ${taskId}`);
+        const { activeTasks } = await getActiveTasksDataWithCache();
+        const task = activeTasks.find((t) => t.id === taskId);
+        if (!task) {
+            throw new Error(`Task not found: ${taskId}`);
         }
-        // Get the file path
-        const apiFilePath = getApiConversationFilePath(tasksDir, taskId);
+        // Get standard path for conversation file
+        const tasksDir = '/Users/ant/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/tasks';
+        const conversationPath = getApiConversationFilePath(tasksDir, taskId);
+        if (!fs.existsSync(conversationPath)) {
+            throw new Error(`api_conversation_history.json not found at ${conversationPath}`);
+        }
         try {
             // Try streaming first (original method)
-            return await streamJsonArray(apiFilePath, options, filterFn);
+            return await streamJsonArray(conversationPath, options, filterFn);
         }
         catch (error) {
             const streamError = error;
             console.warn(`Streaming failed, falling back to direct read: ${streamError.message}`);
             // Fallback to direct reading if streaming fails
-            return await readJsonArray(apiFilePath, options, filterFn);
+            return await readJsonArray(conversationPath, options, filterFn);
         }
     }
     catch (error) {
@@ -39,65 +44,35 @@ export async function getConversationHistory(tasksDir, taskId, options = {}, fil
     }
 }
 /**
- * Get UI messages for a task
- * @param tasksDir Path to the VS Code extension tasks directory
- * @param taskId Task ID
- * @returns Promise resolving to the UI messages
- */
-export async function getUiMessages(tasksDir, taskId) {
-    try {
-        // Check if UI messages file exists
-        if (!await uiMessagesFileExists(tasksDir, taskId)) {
-            throw new Error(`UI messages file not found for task ${taskId}`);
-        }
-        // Get the file path
-        const uiFilePath = getUiMessagesFilePath(tasksDir, taskId);
-        // For UI messages, which are typically smaller, we can read the entire file
-        // If this becomes an issue with large files, we can implement streaming here too
-        const data = await fs.readFile(uiFilePath, 'utf8');
-        return JSON.parse(data);
-    }
-    catch (error) {
-        console.error(`Error getting UI messages for task ${taskId}:`, error);
-        throw new Error(`Failed to get UI messages: ${error.message}`);
-    }
-}
-/**
  * Search across tasks for specific terms in conversations
- * @param tasksDir Path to the VS Code extension tasks directory
  * @param searchTerm Term to search for
  * @param options Search options (limit, maxTasksToSearch)
  * @returns Promise resolving to search results with context
  */
-export async function searchConversations(tasksDir, searchTerm, options = {}) {
+export async function searchConversations(searchTerm, options = {}) {
     try {
         if (!searchTerm) {
             throw new Error('Search term is required');
         }
         const limit = options.limit || 20;
         const maxTasksToSearch = options.maxTasksToSearch || 10;
-        // Get list of tasks
-        const tasks = await fs.readdir(tasksDir, { withFileTypes: true });
-        const taskDirs = tasks
-            .filter(dir => dir.isDirectory())
-            .map(dir => dir.name)
-            .sort()
-            .reverse() // Newest first, assuming timestamp-based names
+        const { activeTasks } = await getActiveTasksDataWithCache();
+        const recentTasks = activeTasks
+            .sort((a, b) => b.lastActivated - a.lastActivated)
             .slice(0, maxTasksToSearch);
         const results = [];
         // Search each task's conversation history
-        for (const taskId of taskDirs) {
+        for (const task of recentTasks) {
             if (results.length >= limit)
                 break;
             try {
-                if (!await apiConversationFileExists(tasksDir, taskId)) {
+                if (!task.conversationPath || !fs.existsSync(task.conversationPath)) {
                     continue;
                 }
-                const apiFilePath = getApiConversationFilePath(tasksDir, taskId);
                 let searchResults;
                 try {
                     // Try streaming search first
-                    searchResults = await searchJsonArray(apiFilePath, searchTerm, 100, // Context length
+                    searchResults = await searchJsonArray(task.conversationPath, searchTerm, 100, // Context length
                     limit - results.length // How many more results we need
                     );
                 }
@@ -105,11 +80,11 @@ export async function searchConversations(tasksDir, searchTerm, options = {}) {
                     const streamError = error;
                     console.warn(`Streaming search failed, falling back to direct search: ${streamError.message}`);
                     // Fallback to direct search
-                    searchResults = await searchJsonArrayDirect(apiFilePath, searchTerm, 100, limit - results.length);
+                    searchResults = await searchJsonArrayDirect(task.conversationPath, searchTerm, 100, limit - results.length);
                 }
                 // Convert to our SearchResult format
                 const formattedResults = searchResults.map(({ item, snippet }) => ({
-                    taskId,
+                    taskId: task.id,
                     timestamp: item.timestamp,
                     role: item.role,
                     snippet,
@@ -118,7 +93,7 @@ export async function searchConversations(tasksDir, searchTerm, options = {}) {
                 results.push(...formattedResults);
             }
             catch (error) {
-                console.warn(`Error searching task ${taskId}:`, error);
+                console.warn(`Error searching task ${task.id}:`, error);
                 // Continue with next task
             }
         }
@@ -131,15 +106,14 @@ export async function searchConversations(tasksDir, searchTerm, options = {}) {
 }
 /**
  * Find code-related discussions in a conversation
- * @param tasksDir Path to the VS Code extension tasks directory
  * @param taskId Task ID
  * @param filename Optional filename to filter discussions by
  * @returns Promise resolving to code-related messages
  */
-export async function findCodeDiscussions(tasksDir, taskId, filename = null) {
+export async function findCodeDiscussions(taskId, filename = null) {
     try {
         // Get conversation history
-        const messages = await getConversationHistory(tasksDir, taskId, {
+        const messages = await getConversationHistory(taskId, {
             limit: 1000 // We need to process more messages to find code discussions
         });
         // Filter for messages containing code blocks or file mentions

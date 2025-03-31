@@ -1,12 +1,12 @@
 /**
  * Active task utilities with caching for the Cline Chat Reader MCP Server
- * Fixed version with improved error handling and detailed logging
+ * Fixed version with direct fs-extra usage and simplified error handling
  */
 
 import { config } from '../config.js';
-import * as fs from 'fs-extra';
-import * as path from 'path';
-import * as os from 'os';
+import fs from 'fs-extra';
+import path from 'path';
+import os from 'os';
 import * as pathUtils from './paths.js';
 
 // Cache for active tasks data
@@ -188,71 +188,16 @@ export function clearActiveTaskCache(): void {
 }
 
 /**
- * Check if active tasks file exists and is readable
- * @returns Promise resolving to true if the file exists and is readable, false otherwise
- */
-export async function checkActiveTasksFile(): Promise<boolean> {
-  try {
-    // Log the path we're checking
-    logDebug(`Checking active tasks file at: ${config.paths.activeTasksFile}`);
-    
-    // Check if file exists and is readable
-    try {
-      // Use fs-extra's pathExists
-      const exists = await fs.pathExists(config.paths.activeTasksFile);
-      if (!exists) {
-        logError(ActiveTaskErrorCode.FILE_READ_ERROR, `Active tasks file does not exist: ${config.paths.activeTasksFile}`);
-        return false;
-      }
-      
-      // Try to read the file to confirm it's readable
-      try {
-        // Use fs.readFileSync from Node.js core fs module
-        const nodeFs = await import('fs');
-        nodeFs.readFileSync(config.paths.activeTasksFile, { encoding: 'utf8' });
-        // If we get here, the file is readable
-      } catch (readError) {
-        logError(ActiveTaskErrorCode.FILE_READ_ERROR, `Active tasks file exists but is not readable: ${config.paths.activeTasksFile}`, readError);
-        return false;
-      }
-    } catch (error) {
-      logError(ActiveTaskErrorCode.FILE_READ_ERROR, `Error checking if active tasks file is readable: ${config.paths.activeTasksFile}`, error);
-      return false;
-    }
-    
-    // Check file stats
-    try {
-      const stats = await fs.stat(config.paths.activeTasksFile);
-      logDebug(`Active tasks file stats: size=${stats.size}, mtime=${stats.mtime}`);
-      
-      if (stats.size === 0) {
-        logError(ActiveTaskErrorCode.FILE_READ_ERROR, `Active tasks file is empty: ${config.paths.activeTasksFile}`);
-        return false;
-      }
-    } catch (error) {
-      logError(ActiveTaskErrorCode.FILE_READ_ERROR, `Error getting active tasks file stats: ${config.paths.activeTasksFile}`, error);
-      return false;
-    }
-    
-    return true;
-  } catch (error) {
-    logError(ActiveTaskErrorCode.FILE_READ_ERROR, `Error checking active tasks file: ${config.paths.activeTasksFile}`, error);
-    return false;
-  }
-}
-
-/**
  * Get active tasks data with caching
  * @returns Promise resolving to active tasks data
  */
 export async function getActiveTasksDataWithCache(): Promise<{ 
   activeTasks: Array<{
     id: string;
-    label: string; 
+    label: string;
     lastActivated: number;
     source?: string;
     extensionType?: string;
-    conversationPath?: string; // Absolute path to conversation file
   }> 
 }> {
   try {
@@ -263,58 +208,44 @@ export async function getActiveTasksDataWithCache(): Promise<{
       return cachedData;
     }
     
-    // Check if file exists and is readable
-    const isFileValid = await checkActiveTasksFile();
-    if (!isFileValid) {
-      return { activeTasks: [] };
+    // Get active tasks data directly using fs-extra
+    const homedir = os.homedir();
+    const ultraActivePath = path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'custom.claude-dev-ultra', 'active_tasks.json');
+    const standardActivePath = path.join(homedir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'active_tasks.json');
+    
+    let activeTasksData = null;
+    
+    // Try to read the active tasks file from both locations
+    if (await fs.pathExists(ultraActivePath)) {
+      try {
+        logDebug(`Reading active tasks from ultra path: ${ultraActivePath}`);
+        const content = await fs.readFile(ultraActivePath, 'utf8');
+        activeTasksData = JSON.parse(content);
+      } catch (error) {
+        logError(ActiveTaskErrorCode.FILE_READ_ERROR, 'Error reading ultra active tasks file:', error);
+      }
     }
     
-    // Read from file if not in cache
-    try {
-      logDebug(`Reading active tasks file: ${config.paths.activeTasksFile}`);
-      const content = await fs.readFile(config.paths.activeTasksFile, 'utf8');
-      
-      if (!content || content.trim() === '') {
-        logError(ActiveTaskErrorCode.FILE_READ_ERROR, 'Active tasks file is empty');
-        return { activeTasks: [] };
-      }
-      
-      logDebug(`Active tasks file content length: ${content.length}`);
-      
-      // Try to parse the JSON
+    if (!activeTasksData && await fs.pathExists(standardActivePath)) {
       try {
-        const data = JSON.parse(content);
-        
-        // Validate the data structure
-        if (!data || typeof data !== 'object') {
-          logError(ActiveTaskErrorCode.FILE_READ_ERROR, 'Invalid active tasks data: not an object');
-          return { activeTasks: [] };
-        }
-        
-        if (!data.activeTasks || !Array.isArray(data.activeTasks)) {
-          logError(ActiveTaskErrorCode.FILE_READ_ERROR, 'Invalid active tasks data: activeTasks is not an array');
-          return { activeTasks: [] };
-        }
-        
-        // Cache the data
-        cacheActiveTasksData(data);
-        
-        logInfo(`Found ${data.activeTasks.length} active tasks`);
-        return data;
+        logDebug(`Reading active tasks from standard path: ${standardActivePath}`);
+        const content = await fs.readFile(standardActivePath, 'utf8');
+        activeTasksData = JSON.parse(content);
       } catch (error) {
-        logError(ActiveTaskErrorCode.FILE_READ_ERROR, 'Error parsing active tasks JSON', error);
-        
-        // Log the first 100 characters of the content to help debug
-        if (content.length > 0) {
-          logDebug(`First 100 chars of content: ${content.substring(0, 100)}...`);
-        }
-        
-        return { activeTasks: [] };
+        logError(ActiveTaskErrorCode.FILE_READ_ERROR, 'Error reading standard active tasks file:', error);
       }
-    } catch (error) {
-      logError(ActiveTaskErrorCode.FILE_READ_ERROR, 'Error reading active tasks file', error);
-      return { activeTasks: [] };
     }
+    
+    // If we found active tasks data, cache it
+    if (activeTasksData) {
+      logInfo(`Found ${activeTasksData.activeTasks?.length || 0} active tasks`);
+      cacheActiveTasksData(activeTasksData);
+      return activeTasksData;
+    }
+    
+    // Return empty array if no active tasks found
+    logWarning('No active tasks found');
+    return { activeTasks: [] };
   } catch (error) {
     logError(ActiveTaskErrorCode.FILE_READ_ERROR, 'Unexpected error in getActiveTasksDataWithCache', error);
     return { activeTasks: [] };
@@ -326,40 +257,58 @@ export async function getActiveTasksDataWithCache(): Promise<{
  * @param taskIdOrLabel Task ID or label (A, B)
  * @returns Promise resolving to active task or undefined if not found
  */
-export interface ActiveTask {
+export async function getActiveTaskWithCache(taskIdOrLabel?: string): Promise<{
   id: string;
   label: string;
   lastActivated: number;
   source?: string;
   extensionType?: string;
-  conversationPath?: string;
-}
-
-export async function getActiveTaskWithCache(taskIdOrLabel?: string): Promise<ActiveTask | undefined> {
+} | undefined> {
   try {
+    logDebug(`Getting active task with taskIdOrLabel: ${taskIdOrLabel || 'undefined'}`);
+    
     // Handle special cases for ACTIVE_A and ACTIVE_B
     if (taskIdOrLabel === 'ACTIVE_A' || taskIdOrLabel === 'ACTIVE_B') {
       const label = taskIdOrLabel === 'ACTIVE_A' ? 'A' : 'B';
+      logDebug(`Looking for active task with label: ${label}`);
       
       // Check cache first for the label
       const cachedData = getCachedActiveTasksData();
       if (cachedData && cachedData.activeTasks) {
         const task = cachedData.activeTasks.find(t => t.label === label);
         if (task) {
+          logDebug(`Found cached task with label ${label}: ${task.id}`);
           return task;
         }
       }
       
       // If not in cache, get from file
       const activeTasksData = await getActiveTasksDataWithCache();
-      return activeTasksData.activeTasks.find(task => task.label === label);
+      
+      // Log all active tasks for debugging
+      if (CURRENT_LOG_LEVEL >= LogLevel.DEBUG) {
+        logDebug(`Active tasks data: ${JSON.stringify(activeTasksData)}`);
+      }
+      
+      const task = activeTasksData.activeTasks.find(task => task.label === label);
+      
+      if (task) {
+        logDebug(`Found task with label ${label}: ${task.id}`);
+        return task;
+      }
+      
+      logWarning(`No task found with label: ${label}`);
+      return undefined;
     }
     
     // If taskIdOrLabel is a specific task ID
     if (taskIdOrLabel) {
+      logDebug(`Looking for active task with ID: ${taskIdOrLabel}`);
+      
       // Check cache first for the task ID
       const cachedTask = getCachedActiveTask(taskIdOrLabel);
       if (cachedTask) {
+        logDebug(`Found cached task with ID: ${taskIdOrLabel}`);
         return cachedTask;
       }
       
@@ -370,14 +319,16 @@ export async function getActiveTaskWithCache(taskIdOrLabel?: string): Promise<Ac
       if (task) {
         // Cache the task
         cacheActiveTask(taskIdOrLabel, task);
+        logDebug(`Found and cached task with ID: ${taskIdOrLabel}`);
         return task;
       }
       
-      // If not an active task, return undefined
+      logWarning(`No task found with ID: ${taskIdOrLabel}`);
       return undefined;
     }
     
     // If no taskIdOrLabel provided, return the first active task (prioritize A then B)
+    logDebug(`No taskIdOrLabel provided, looking for default active task`);
     const activeTasksData = await getActiveTasksDataWithCache();
     
     if (activeTasksData.activeTasks && activeTasksData.activeTasks.length > 0) {
@@ -386,8 +337,13 @@ export async function getActiveTaskWithCache(taskIdOrLabel?: string): Promise<Ac
                   activeTasksData.activeTasks.find(t => t.label === 'B') ||
                   activeTasksData.activeTasks[0];
       
-      return task;
+      if (task) {
+        logDebug(`Found default active task: ${task.id} (label: ${task.label})`);
+        return task;
+      }
     }
+    
+    logWarning('No active tasks found');
   } catch (error) {
     logError(ActiveTaskErrorCode.FILE_READ_ERROR, 'Error getting active task', error);
   }
@@ -409,18 +365,24 @@ export async function getAllActiveTasksWithCache(label?: string): Promise<Array<
   extensionType?: string;
 }>> {
   try {
+    logDebug(`Getting all active tasks${label ? ` with label: ${label}` : ''}`);
+    
     const activeTasksData = await getActiveTasksDataWithCache();
     
     if (!activeTasksData.activeTasks || activeTasksData.activeTasks.length === 0) {
+      logWarning('No active tasks found');
       return [];
     }
     
     // Filter by label if provided
     if (label) {
-      return activeTasksData.activeTasks.filter(task => task.label === label);
+      const filteredTasks = activeTasksData.activeTasks.filter(task => task.label === label);
+      logDebug(`Found ${filteredTasks.length} tasks with label: ${label}`);
+      return filteredTasks;
     }
     
     // Return all active tasks
+    logDebug(`Found ${activeTasksData.activeTasks.length} active tasks`);
     return activeTasksData.activeTasks;
   } catch (error) {
     logError(ActiveTaskErrorCode.FILE_READ_ERROR, 'Error getting all active tasks', error);
@@ -435,14 +397,18 @@ export async function getAllActiveTasksWithCache(label?: string): Promise<Array<
  */
 export async function getTasksDirectoryForTask(taskId: string): Promise<string> {
   try {
+    logDebug(`Getting tasks directory for task: ${taskId}`);
+    
     // Use the path utilities to find the task across all possible paths
     const taskLocation = await pathUtils.findTaskAcrossPaths(taskId);
     
     if (taskLocation) {
+      logDebug(`Found task directory: ${taskLocation.basePath}`);
       return taskLocation.basePath;
     }
     
     // If task not found, throw an error
+    logError(ActiveTaskErrorCode.TASK_NOT_FOUND, `Task directory not found for task ID: ${taskId}`);
     throw new Error(`Task directory not found for task ID: ${taskId}`);
   } catch (error) {
     logError(ActiveTaskErrorCode.TASK_NOT_FOUND, `Task directory not found for task ID: ${taskId}`, error);
@@ -457,9 +423,14 @@ export async function getTasksDirectoryForTask(taskId: string): Promise<string> 
  */
 export async function validateTaskExists(taskId: string): Promise<boolean> {
   try {
+    logDebug(`Validating task exists: ${taskId}`);
+    
     // Use the path utilities to find the task across all possible paths
     const taskLocation = await pathUtils.findTaskAcrossPaths(taskId);
-    return !!taskLocation;
+    const exists = !!taskLocation;
+    
+    logDebug(`Task ${taskId} exists: ${exists}`);
+    return exists;
   } catch (error) {
     logError(ActiveTaskErrorCode.TASK_NOT_FOUND, `Error validating task existence: ${taskId}`, error);
     return false;
@@ -473,14 +444,19 @@ export async function validateTaskExists(taskId: string): Promise<boolean> {
  */
 export async function getApiConversationFilePath(taskId: string): Promise<string> {
   try {
+    logDebug(`Getting API conversation file path for task: ${taskId}`);
+    
     // Use the path utilities to find the task across all possible paths
     const taskLocation = await pathUtils.findTaskAcrossPaths(taskId);
     
     if (taskLocation) {
-      return pathUtils.getApiConversationFilePath(taskLocation.basePath, taskId);
+      const filePath = pathUtils.getApiConversationFilePath(taskLocation.basePath, taskId);
+      logDebug(`Found API conversation file path: ${filePath}`);
+      return filePath;
     }
     
     // If task not found, throw an error
+    logError(ActiveTaskErrorCode.TASK_NOT_FOUND, `Task not found for API conversation file: ${taskId}`);
     throw new Error(`Task not found for API conversation file: ${taskId}`);
   } catch (error) {
     logError(ActiveTaskErrorCode.TASK_NOT_FOUND, `Error getting API conversation file path: ${taskId}`, error);
@@ -495,10 +471,13 @@ export async function getApiConversationFilePath(taskId: string): Promise<string
  */
 export async function writeAdviceToTask(taskId: string, advice: any): Promise<void> {
   try {
+    logDebug(`Writing advice to task: ${taskId}`);
+    
     // Use the path utilities to find the task across all possible paths
     const taskLocation = await pathUtils.findTaskAcrossPaths(taskId);
     
     if (!taskLocation) {
+      logError(ActiveTaskErrorCode.TASK_NOT_FOUND, `Task not found for writing advice: ${taskId}`);
       throw new Error(`Task not found for writing advice: ${taskId}`);
     }
     

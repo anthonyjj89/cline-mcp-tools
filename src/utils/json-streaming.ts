@@ -6,6 +6,7 @@
 import fs from 'fs';
 import { createRequire } from 'module';
 import { chain } from 'stream-chain';
+import { Message } from '../models/task.js';
 
 const require = createRequire(import.meta.url);
 const { Parser } = require('stream-json/Parser');
@@ -18,6 +19,7 @@ export interface MessageFilterOptions {
   limit?: number;
   since?: number;
   search?: string;
+  filterFn?: (message: Message) => boolean;
 }
 
 /**

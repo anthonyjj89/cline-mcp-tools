@@ -5,6 +5,7 @@
 
 import { Message } from '../models/task.js';
 import { logError, logWarning } from './active-task.js';
+import { parseJsonWithRepair } from './json-repair.js';
 
 /**
  * Error codes for message operations
@@ -79,38 +80,45 @@ export function standardizeMessageContent(messages: Message[]): Message[] {
  * @param limit Maximum number of messages to retrieve
  * @returns Array of messages
  */
-export function parseConversationContent(content: string, limit: number): Message[] {
-  try {
-    // Try to parse as JSON
-    const data = JSON.parse(content);
-    
-    // Extract messages based on the file format
-    let messages: Message[] = [];
-    
-    if (Array.isArray(data)) {
-      // Direct array of messages
-      messages = data;
-    } else if (data.messages && Array.isArray(data.messages)) {
-      // Object with messages property
-      messages = data.messages;
-    } else if (data.conversation && Array.isArray(data.conversation)) {
-      // Object with conversation property
-      messages = data.conversation;
-    }
-    
-    // Sort messages by timestamp if available
-    messages.sort((a, b) => {
-      const timestampA = a.timestamp || 0;
-      const timestampB = b.timestamp || 0;
-      return timestampA - timestampB;
-    });
-    
-    // Return the most recent messages up to the limit
-    return messages.slice(-limit);
-  } catch (error) {
-    logError(MessageErrorCode.PARSE_ERROR, 'Error parsing conversation content:', error);
+export function parseConversationContent(content: string, limit: number, isUiFormat: boolean = false): Message[] {
+  // First try direct parse
+  let data = parseJsonWithRepair(content);
+  if (!data) {
+    logError(MessageErrorCode.PARSE_ERROR, 'Failed to parse conversation content even after repair');
     return [];
   }
+
+  let messages: Message[] = [];
+  
+  if (isUiFormat) {
+    // Handle UI messages format - array of objects with text property
+    if (Array.isArray(data)) {
+      messages = data.map(item => ({
+        role: item.say === 'text' ? 'human' : 'assistant',
+        content: item.text || '',
+        timestamp: item.ts
+      }));
+    }
+  } else {
+    // Handle API format
+    if (Array.isArray(data)) {
+      messages = data;
+    } else if (data.messages && Array.isArray(data.messages)) {
+      messages = data.messages;
+    } else if (data.conversation && Array.isArray(data.conversation)) {
+      messages = data.conversation;
+    }
+  }
+  
+  // Sort messages by timestamp if available
+  messages.sort((a, b) => {
+    const timestampA = a.timestamp || 0;
+    const timestampB = b.timestamp || 0;
+    return timestampA - timestampB;
+  });
+  
+  // Return the most recent messages up to the limit
+  return messages.slice(-limit);
 }
 
 /**

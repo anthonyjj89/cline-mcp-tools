@@ -15,7 +15,6 @@ import {
   logDebug, 
   LogLevel 
 } from './diagnostic-logger.js';
-import { parseJsonWithRepair } from './json-repair.js';
 
 /**
  * Get the platform-specific path to the VS Code extension tasks directory
@@ -359,19 +358,19 @@ export async function getActiveTasksData(): Promise<{
           : content;
         logDebug(`File content (truncated): ${truncated}`);
         
-        // Parse the JSON with repair fallback
-        const parsed = parseJsonWithRepair(content);
-        
-        if (parsed) {
+        try {
+          // Parse the JSON
+          const parsed = JSON.parse(content);
           logInfo(`Successfully parsed active tasks JSON from ${activeTasksPath}`);
           logDebug(`Active tasks count: ${parsed.activeTasks?.length || 0}`);
           
           if (parsed.activeTasks && parsed.activeTasks.length > 0) {
             logDebug(`First active task: ${JSON.stringify(parsed.activeTasks[0])}`);
           }
+          
           return parsed;
-        } else {
-          logError(`Failed to parse active tasks JSON even after repair from ${activeTasksPath}`);
+        } catch (parseError) {
+          logWarning(`Error parsing active tasks JSON from ${activeTasksPath}`, parseError);
         }
       }
     } catch (error) {
